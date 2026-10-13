@@ -1,0 +1,45 @@
+{
+  "name": "snowsync",
+  "version": "0.0.0",
+  "private": true,
+  "description": "SnowSync: Sacramento State Ski & Snow Club mobile app (monorepo root)",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=24.11.0 <25"
+  },
+  "scripts": {
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "dev:server": "npm run dev --workspace @snowsync/server",
+    "mobile": "npm run start --workspace @snowsync/mobile"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.0",
+    "@types/node": "^24.19.2",
+    "eslint": "^9.39.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.9.10",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.71.2"
+  },
+  "overrides": {
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-test-renderer": "19.2.3",
+    "react-native-worklets": "0.10.1"
+  },
+  "allowScripts": {
+    "esbuild": true,
+    "prisma": true,
+    "unrs-resolver": true,
+    "@prisma/engines": true
+  }
+}
