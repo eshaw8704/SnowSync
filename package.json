@@ -1,0 +1,10 @@
+{
+    "name": "snowsync",
+    "version": "0.0.0",
+    "private": true,
+    "description": "SnowSync: Sacramento State Ski & Snow Club mobile app (monorepo root)",
+    "workspaces": [
+        "packages/*",
+        "apps/*"
+    ],
+}
