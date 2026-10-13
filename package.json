@@ -1,16 +1,16 @@
 {
-    "name": "snowsync",
-    "version": "0.0.0",
-    "private": true,
-    "description": "SnowSync: Sacramento State Ski & Snow Club mobile app (monorepo root)",
-    "workspaces": [
-        "packages/*",
-        "apps/*"
-    ],
-    "engines": {
-        "node": ">=24.11.0 <25"
-    },
-    "scripts": {
+  "name": "snowsync",
+  "version": "0.0.0",
+  "private": true,
+  "description": "SnowSync: Sacramento State Ski & Snow Club mobile app (monorepo root)",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=24.11.0 <25"
+  },
+  "scripts": {
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
@@ -21,7 +21,7 @@
     "dev:server": "npm run dev --workspace @snowsync/server",
     "mobile": "npm run start --workspace @snowsync/mobile"
   },
-    "devDependencies": {
+  "devDependencies": {
     "@eslint/js": "^9.39.0",
     "@types/node": "^24.19.2",
     "eslint": "^9.39.0",

@@ -15,7 +15,7 @@ export default tseslint.config(
       'apps/server/src/generated/**',
       'apps/server/prisma/migrations/**',
     ],
-  }, 
+  },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
   {
@@ -38,7 +38,7 @@ export default tseslint.config(
         { selector: 'typeLike', format: ['PascalCase'] },
       ],
       'no-console': 'error',
-    },   
+    },
   },
   {
     // Test files read loosely-typed values such as supertest's res.body.
@@ -51,7 +51,7 @@ export default tseslint.config(
   },
   {
     files: ['**/*.{js,mjs,cjs}'],
-    ...tseslint.configs.disableTypeChecked,   
+    ...tseslint.configs.disableTypeChecked,
   },
   prettier,
 );
