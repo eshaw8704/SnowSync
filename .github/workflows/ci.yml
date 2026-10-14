@@ -1,0 +1,11 @@
+#SnowSync CI: every pull request and every push to main must pass all four checks
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
