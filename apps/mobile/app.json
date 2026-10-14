@@ -1,29 +1,29 @@
 {
-    "expo": {
-        "name": "SnowSync",
-        "slug": "snowsync",
-        "scheme": "snowsync",
-        "version": "0.1.0",
-        "orientation": "portrait",
-        "icon": "./assets/icon.png",
-        "userInterfaceStyle": "light",
-        "ios": {
-            "supportsTablet": false,
-            "bundleIdentifier": "edu.csus.snowsync"
-        },
-        "android": {
-            "package": "edu.csus.snowsync",
-            "adaptiveIcon": {
-                "backgroundColor": "#00573D",
-                "foregroundImage": "./assets/android-icon-foreground.png",
-                "backgroundImage": "./assets/android-icon-background.png",
-                "monochromeImage": "./assets/android-icon-monochrome.png"
-            },
-            "predictiveBackGestureEnabled": false
-        },
-        "plugins": ["expo-router", "expo-font", "expo-splash-screen"],
-        "experiments": {
-            "typedRoutes": true
-        }
+  "expo": {
+    "name": "SnowSync",
+    "slug": "snowsync",
+    "scheme": "snowsync",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "edu.csus.snowsync"
+    },
+    "android": {
+      "package": "edu.csus.snowsync",
+      "adaptiveIcon": {
+        "backgroundColor": "#00573D",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": ["expo-router", "expo-font", "expo-splash-screen"],
+    "experiments": {
+      "typedRoutes": true
     }
+  }
 }
