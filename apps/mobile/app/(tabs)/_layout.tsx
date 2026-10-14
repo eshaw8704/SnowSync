@@ -18,3 +18,29 @@ const TABS: { name: string; title: string; icon: IconName } [] = [
 ];
 
 // Bottom tab navigator shown for every member
+export default function TabLayout() {
+  return (
+    <Tabs
+      screenOptions={{
+        headerShown: false,
+        tabBarActiveTintColor: ACTIVE_TINT,
+        tabBarInactiveTintColor: INACTIVE_TINT,
+        tabBarItemStyle: { minHeight: 48 },
+      }}
+    >
+      {TABS.map((tab) => (
+        <Tabs.Screen
+          key={tab.name}
+          name={tab.name}
+          options={{
+            title: tab.title,
+            tabBarAccessibilityLabel: `${tab.title} tab`,
+            tabBarIcon: ({ color, size }) => (
+              <MaterialCommunityIcons name={tab.icon} color={color} size={size} />
+            ),
+          }}
+        />
+      ))}
+    </Tabs>
+  );
+}
