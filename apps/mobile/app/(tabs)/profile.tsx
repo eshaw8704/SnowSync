@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-// Profile tab placeholder. Real content arrives in a later sprint. 
+// Profile tab placeholder. Real content arrives in a later sprint.
 export default function ProfileScreen() {
   return (
     <View style={styles.container}>
