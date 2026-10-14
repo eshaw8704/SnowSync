@@ -1,0 +1,31 @@
+// SnowSync database schema (Prisma ORM 7).
+// Model and field names are camelCase in TypeScript and snake_case in PostgreSQL (@map / @@map).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// Club-level role. Must match UserRole in @snowsync/shared.
+enum UserRole {
+  MEMBER
+  OFFICER
+
+  @@map("user_role")
+}
+
+/// One SnowSync account. Sprint 2 adds credentials and membership.
+model User {
+  id          String   @id @default(uuid()) @db.Uuid
+  email       String   @unique
+  displayName String   @map("display_name")
+  role        UserRole @default(MEMBER)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("users")
+}
