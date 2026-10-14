@@ -1,4 +1,5 @@
 /** 4 px rhythm from Figma catalog 00. */
+import { colors } from './colors';
 export const spacing = {
   xs: 4,
   sm: 8,
@@ -31,7 +32,7 @@ export const sizes = {
 /** "Quiet depth": the one card shadow (y 4, blur 16, #123C26 at ~6 % opacity). */
 export const shadow = {
   card: {
-    shadowColor: '#123C26',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.06,
     shadowRadius: 8,
