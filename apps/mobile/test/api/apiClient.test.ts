@@ -67,4 +67,77 @@ describe('apiRequest', () => {
     expect(error).toBeInstanceOf(ApiClientError);
     expect(error).toMatchObject({ code: 'INTERNAL', status: 502 });
   });
+
+  it.each(['NETWORK_ERROR', 'TIMEOUT'])(
+    'rejects client-only error code %s sent by the server',
+    async (code) => {
+      fetchMock.mockResolvedValue(
+        jsonResponse(400, {
+          ok: false,
+          error: { code, message: 'Invalid server error' },
+        }),
+      );
+
+      await expect(apiRequest('GET', '/health')).rejects.toMatchObject({
+        code: 'INTERNAL',
+        status: 400,
+      });
+    },
+  );
+
+  it('rejects GET requests with a body', async () => {
+    await expect(apiRequest('GET', '/health', { body: { test: true } })).rejects.toMatchObject({
+      code: 'INTERNAL',
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects a body that cannot be serialized', async () => {
+    const body: Record<string, unknown> = {};
+    body.self = body;
+
+    await expect(apiRequest('POST', '/health', { body })).rejects.toMatchObject({
+      code: 'INTERNAL',
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([null, [], 'invalid'])('rejects invalid server error details %p', async (details) => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(400, {
+        ok: false,
+        error: {
+          code: 'VALIDATION_FAILED',
+          message: 'Invalid request',
+          details,
+        },
+      }),
+    );
+
+    await expect(apiRequest('GET', '/health')).rejects.toMatchObject({
+      code: 'INTERNAL',
+      status: 400,
+    });
+  });
+
+  it('accepts valid server error details', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(409, {
+        ok: false,
+        error: {
+          code: 'CONFLICT',
+          message: 'Trip is full',
+          details: { reason: 'TRIP_FULL' },
+        },
+      }),
+    );
+
+    await expect(apiRequest('GET', '/trips')).rejects.toMatchObject({
+      code: 'CONFLICT',
+      status: 409,
+      details: { reason: 'TRIP_FULL' },
+    });
+  });
 });

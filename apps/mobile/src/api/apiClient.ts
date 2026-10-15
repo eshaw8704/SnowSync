@@ -42,6 +42,24 @@ export async function apiRequest<T>(
   path: string,
   options: ApiRequestOptions = {},
 ): Promise<T> {
+  if (method === 'GET' && options.body !== undefined) {
+    throw new ApiClientError({
+      code: 'INTERNAL',
+      message: 'GET requests cannot include a body.',
+    });
+  }
+
+  let requestBody: string | undefined;
+
+  try {
+    requestBody = options.body !== undefined ? JSON.stringify(options.body) : undefined;
+  } catch {
+    throw new ApiClientError({
+      code: 'INTERNAL',
+      message: 'The request body could not be serialized.',
+    });
+  }
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? REQUEST_TIMEOUT_MS);
 
@@ -53,7 +71,7 @@ export async function apiRequest<T>(
         Accept: 'application/json',
         ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
       },
-      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      body: requestBody,
       signal: controller.signal,
     });
   } catch {
@@ -95,8 +113,26 @@ function isEnvelope<T>(value: unknown): value is ApiResponse<T> {
   if (typeof value !== 'object' || value === null || !('ok' in value)) return false;
   if (value.ok === true) return 'data' in value;
   if (value.ok === false && 'error' in value) {
-    const error = value.error as { code?: unknown; message?: unknown } | null;
-    return error !== null && isApiErrorCode(error.code) && typeof error.message === 'string';
+    const error = value.error;
+
+    return (
+      isPlainObject(error) &&
+      isApiErrorCode(error.code) &&
+      error.code !== 'NETWORK_ERROR' &&
+      error.code !== 'TIMEOUT' &&
+      typeof error.message === 'string' &&
+      (error.details === undefined || isPlainObject(error.details))
+    );
   }
   return false;
+}
+
+/** Checks whether a value is a plain object, not an array or null. */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }
