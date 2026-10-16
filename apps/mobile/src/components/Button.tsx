@@ -54,7 +54,10 @@ export function Button({
     >
       <View style={styles.content}>
         {loading ? (
-          <ActivityIndicator color={colors[fill.text]} accessibilityElementsHidden />
+          <ActivityIndicator
+            color={disabled ? colors.textPrimary : colors[fill.text]}
+            accessibilityElementsHidden
+          />
         ) : (
           <Text variant="label" color={disabled ? 'textMuted' : fill.text}>
             {label}
