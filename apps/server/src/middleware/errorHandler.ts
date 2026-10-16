@@ -3,9 +3,23 @@ import type { ErrorRequestHandler } from 'express';
 import { ZodError } from 'zod';
 import { HttpError } from '../lib/httpError';
 
+/** True for errors from express.json() when it cannot read the body (bad JSON, too large). */
+function isBodyParserError(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    'type' in err &&
+    typeof err.type === 'string' &&
+    'status' in err &&
+    typeof err.status === 'number' &&
+    err.status >= 400 &&
+    err.status < 500
+  );
+}
+
 /**
  * The last middleware. Converts any thrown error into the shared ApiError envelope.
- * Known errors keep their code; zod errors become VALIDATION_FAILED; anything else becomes INTERNAL with a generic message.
+ * Known errors keep their code; zod errors and unreadable request bodies become VALIDATION_FAILED; anything else becomes INTERNAL with a generic message.
  * Stack traces never reach the client.
  */
 export const errorHandler: ErrorRequestHandler = (err: unknown, req, res, _next) => {
@@ -33,6 +47,12 @@ export const errorHandler: ErrorRequestHandler = (err: unknown, req, res, _next)
           issues: err.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
         },
       },
+    };
+  } else if (isBodyParserError(err)) {
+    status = 400;
+    body = {
+      ok: false,
+      error: { code: 'VALIDATION_FAILED', message: 'The request body could not be read.' },
     };
   } else {
     status = 500;
