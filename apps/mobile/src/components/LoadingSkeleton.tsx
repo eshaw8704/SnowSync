@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import { AccessibilityInfo, Animated, StyleSheet, View } from 'react-native';
 import { colors, radii, spacing } from '../theme';

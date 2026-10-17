@@ -1,4 +1,3 @@
-
 import { render, screen } from '@testing-library/react-native';
 import { AccessibilityInfo } from 'react-native';
 import { LoadingSkeleton } from '../../src/components/LoadingSkeleton';
