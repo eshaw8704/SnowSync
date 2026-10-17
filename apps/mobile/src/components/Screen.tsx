@@ -11,7 +11,6 @@ export interface ScreenProps {
   testID?: string;
 }
 
-
 export function Screen({
   children,
   scroll = false,
