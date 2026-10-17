@@ -2,20 +2,15 @@ import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { colors, radii, sizes, spacing, type ColorToken } from '../theme';
 import { Text } from './Text';
 
-/** Visual style of a {@link Button}. */
 export type ButtonVariant = 'primary' | 'secondary' | 'destructive';
 
-/** Props for {@link Button}. */
 export interface ButtonProps {
   label: string;
   onPress: () => void;
   variant?: ButtonVariant;
-  //Greys the button out and ignores presses
   disabled?: boolean;
-  //Shows a spinner, ignores presses and announces "busy".
   loading?: boolean;
   accessibilityHint?: string;
-  //For TEsting
   testID?: string;
 }
 
@@ -36,6 +31,7 @@ export function Button({
 }: ButtonProps) {
   const inactive = disabled || loading;
   const fill = FILL[variant];
+
   return (
     <Pressable
       testID={testID}
@@ -53,15 +49,23 @@ export function Button({
       ]}
     >
       <View style={styles.content}>
-        {loading ? (
+        <Text
+          variant="label"
+          color={disabled ? 'textMuted' : fill.text}
+          style={[styles.label, loading && styles.hiddenLabel]}
+          accessibilityElementsHidden={loading}
+          importantForAccessibility={loading ? 'no-hide-descendants' : 'auto'}
+        >
+          {label}
+        </Text>
+
+        {loading && (
           <ActivityIndicator
+            style={styles.spinner}
             color={disabled ? colors.textPrimary : colors[fill.text]}
             accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
           />
-        ) : (
-          <Text variant="label" color={disabled ? 'textMuted' : fill.text}>
-            {label}
-          </Text>
         )}
       </View>
     </Pressable>
@@ -76,7 +80,28 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  content: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
-  secondaryBorder: { borderWidth: 1, borderColor: colors.border },
-  disabled: { backgroundColor: colors.subtleFill, borderWidth: 0 },
+  content: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  label: {
+    flexShrink: 1,
+    textAlign: 'center',
+  },
+  hiddenLabel: {
+    opacity: 0,
+  },
+  spinner: {
+    position: 'absolute',
+  },
+  secondaryBorder: {
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  disabled: {
+    backgroundColor: colors.subtleFill,
+    borderWidth: 0,
+  },
 });
