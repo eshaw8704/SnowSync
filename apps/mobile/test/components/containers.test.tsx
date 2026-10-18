@@ -1,4 +1,3 @@
-
 import { render, screen } from '@testing-library/react-native';
 import { ScrollView } from 'react-native'; // NEW
 import { Card } from '../../src/components/Card';
