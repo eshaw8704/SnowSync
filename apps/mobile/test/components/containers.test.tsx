@@ -1,4 +1,6 @@
+
 import { render, screen } from '@testing-library/react-native';
+import { ScrollView } from 'react-native'; // NEW
 import { Card } from '../../src/components/Card';
 import { Screen } from '../../src/components/Screen';
 import { Text } from '../../src/components/Text';
@@ -35,5 +37,8 @@ describe('Screen', () => {
       </Screen>,
     );
     expect(screen.getByText('Scrolling')).toBeTruthy();
+
+    // NEW: Verify scrolling uses React Native's ScrollView
+    expect(screen.UNSAFE_getByType(ScrollView)).toBeTruthy();
   });
 });
