@@ -23,12 +23,32 @@ export function LoadingSkeleton({
   const [reduceMotion, setReduceMotion] = useState(true);
   const [opacity] = useState(() => new Animated.Value(1));
 
+  // Keep the number of lines within a safe range.
+  const safeLines = Number.isFinite(lines) ? Math.max(0, Math.min(10, Math.floor(lines))) : 2;
+
   useEffect(() => {
     let mounted = true;
-    void AccessibilityInfo.isReduceMotionEnabled().then((enabled) => {
-      if (mounted) setReduceMotion(enabled);
+    let receivedChangeEvent = false;
+
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', (enabled) => {
+      receivedChangeEvent = true;
+      setReduceMotion(enabled);
     });
-    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
+
+    void AccessibilityInfo.isReduceMotionEnabled()
+      .then((enabled) => {
+        // Ignore an outdated result if a newer event was received.
+        if (mounted && !receivedChangeEvent) {
+          setReduceMotion(enabled);
+        }
+      })
+      .catch(() => {
+        // Allow animation if the accessibility query fails.
+        if (mounted && !receivedChangeEvent) {
+          setReduceMotion(false);
+        }
+      });
+
     return () => {
       mounted = false;
       subscription.remove();
@@ -40,12 +60,22 @@ export function LoadingSkeleton({
       opacity.setValue(1);
       return;
     }
+
     const pulse = Animated.loop(
       Animated.sequence([
-        Animated.timing(opacity, { toValue: 0.5, duration: 700, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 1, duration: 700, useNativeDriver: true }),
+        Animated.timing(opacity, {
+          toValue: 0.5,
+          duration: 700,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: 700,
+          useNativeDriver: true,
+        }),
       ]),
     );
+
     pulse.start();
     return () => pulse.stop();
   }, [reduceMotion, opacity]);
@@ -60,10 +90,10 @@ export function LoadingSkeleton({
     >
       <Animated.View style={[styles.stack, { opacity }]}>
         {showBlock && <View style={styles.block} />}
-        {Array.from({ length: lines }, (_, index) => (
+        {Array.from({ length: safeLines }, (_, index) => (
           <View
             key={index}
-            style={[styles.line, { width: index === lines - 1 ? '60%' : '100%' }]}
+            style={[styles.line, { width: index === safeLines - 1 ? '60%' : '100%' }]}
           />
         ))}
       </Animated.View>
@@ -73,6 +103,14 @@ export function LoadingSkeleton({
 
 const styles = StyleSheet.create({
   stack: { gap: spacing.sm },
-  block: { height: 72, borderRadius: radii.field, backgroundColor: colors.subtleFill },
-  line: { height: 12, borderRadius: radii.pill, backgroundColor: colors.subtleFill },
+  block: {
+    height: 72,
+    borderRadius: radii.field,
+    backgroundColor: colors.subtleFill,
+  },
+  line: {
+    height: 12,
+    borderRadius: radii.pill,
+    backgroundColor: colors.subtleFill,
+  },
 });
