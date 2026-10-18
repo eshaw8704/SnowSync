@@ -1,0 +1,30 @@
+import { render, screen } from '@testing-library/react-native';
+import { AccessibilityInfo } from 'react-native';
+import { LoadingSkeleton } from '../../src/components/LoadingSkeleton';
+
+describe('LoadingSkeleton', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('announces itself as loading and busy', async () => {
+    jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
+    render(<LoadingSkeleton accessibilityLabel="Loading server status" />);
+
+    const skeleton = await screen.findByRole('progressbar', {
+      name: 'Loading server status',
+    });
+
+    expect(skeleton).toHaveProp('accessible', true);
+    expect(skeleton).toHaveProp('accessibilityRole', 'progressbar');
+    expect(skeleton).toHaveProp('accessibilityLabel', 'Loading server status');
+    expect(skeleton).toBeBusy();
+  });
+
+  it('defaults its label to "Loading"', async () => {
+    jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(false);
+    render(<LoadingSkeleton />);
+
+    expect(await screen.findByLabelText('Loading')).toBeTruthy();
+  });
+});
