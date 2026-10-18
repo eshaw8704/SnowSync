@@ -39,6 +39,7 @@ export function ServerStatusCard() {
   }, []);
 
   useEffect(() => {
+    if (!__DEV__) return;
     request();
   }, [request]);
 
