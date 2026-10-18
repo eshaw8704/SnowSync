@@ -60,9 +60,18 @@ export function ErrorState({
 }: ErrorStateProps) {
   const copy = ERROR_COPY[variant];
   return (
-    <View testID={testID} style={styles.panel} accessibilityRole="alert">
+    <View
+      testID={testID}
+      style={styles.panel}
+      accessibilityRole="alert"
+      accessibilityLiveRegion="assertive"
+    >
       <View style={styles.header}>
-        <View style={styles.iconCircle} accessibilityElementsHidden importantForAccessibility="no">
+        <View
+          style={styles.iconCircle}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+        >
           <MaterialCommunityIcons name="alert-circle-outline" size={18} color={colors.late} />
         </View>
         <Text variant="bodyStrong" accessibilityRole="header" style={styles.title}>

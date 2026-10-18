@@ -34,7 +34,11 @@ export function EmptyState({
     <Card testID={testID} style={styles.card}>
       <View style={styles.panel}>
         <View style={styles.header}>
-          <View style={styles.iconTile} accessibilityElementsHidden importantForAccessibility="no">
+          <View
+            style={styles.iconTile}
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+          >
             <MaterialCommunityIcons name={icon} size={20} color={colors.textPrimary} />
           </View>
           <View style={styles.titles}>
