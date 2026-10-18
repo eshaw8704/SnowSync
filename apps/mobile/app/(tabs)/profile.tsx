@@ -1,14 +1,15 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Screen } from '../../src/components/Screen';
+import { Text } from '../../src/components/Text';
+import { ServerStatusCard } from '../../src/features/devStatus/ServerStatusCard';
 
-// Profile tab placeholder. Real content arrives in a later sprint.
+//Preofile tab, for now its only supposed ot show the developer tab as part of Sprint 1's scope
 export default function ProfileScreen() {
   return (
-    <View style={styles.container}>
-      <Text accessibilityRole="header">Profile</Text>
-    </View>
+    <Screen scroll>
+      <Text variant="title" accessibilityRole="header">
+        Profile
+      </Text>
+      <ServerStatusCard />
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-});
