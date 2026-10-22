@@ -7,6 +7,16 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']),
   DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
+  /** Signs access tokens (HS256). At least 32 characters; different in every environment. */
+  JWT_ACCESS_SECRET: z.string().min(32, { message: 'must be at least 32 characters' }),
+  /** Access-token lifetime. 15 minutes by default (System Map §01). */
+  ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).default(900),
+  /** Refresh-token lifetime. 30 days by default (System Map §01). */
+  REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).default(30),
+  /** Base of the link in password-reset emails; the token is added as ?token=… */
+  PASSWORD_RESET_URL: z.url().default('snowsync://reset-password'),
+  /** Sender shown on SnowSync emails. Amazon SES replaces the console sender in Sprint 4. */
+  EMAIL_FROM: z.string().min(3).default('SnowSync <no-reply@snowsync.local>'),
 });
 
 /** Validated, typed server configuration. */

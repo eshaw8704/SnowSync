@@ -2,7 +2,7 @@ import express, { type Express } from 'express';
 import { errorHandler } from './middleware/errorHandler';
 import { notFound } from './middleware/notFound';
 import { requestLogger } from './middleware/requestLogger';
-import { healthRouter } from './modules/health/healthRoutes';
+import { registerRoutes } from './routes';
 
 /**
  * Builds the Express app without starting a listener, so tests can use it directly.
@@ -15,8 +15,8 @@ export function createApp(): Express {
   app.use(requestLogger);
   app.use(express.json({ limit: '100kb' }));
 
-  // Module routers. Later sprints add one line per module here.
-  app.use(healthRouter);
+  // Every module router is mounted in routes.ts. Do not add routes here.
+  registerRoutes(app);
 
   app.use(notFound);
   app.use(errorHandler);
