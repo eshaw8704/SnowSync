@@ -91,4 +91,27 @@ describe('authStore', () => {
     userLoaded(user({ role: 'VICE_PRESIDENT' }));
     expect(selectIsExecutive(useAuthStore.getState())).toBe(true);
   });
+
+  it('hides privileged UI from an unverified session', () => {
+    useAuthStore
+      .getState()
+      .sessionUnverified(user({ role: 'PRESIDENT', permissions: ['REVIEW_MEMBERSHIPS'] }));
+    expect(selectHasPermission('REVIEW_MEMBERSHIPS')(useAuthStore.getState())).toBe(false);
+    expect(selectIsExecutive(useAuthStore.getState())).toBe(false);
+  });
+
+  it('clears the user and tokens when a signed-in person signs out', () => {
+    const { sessionStarted, userLoaded, signedOut } = useAuthStore.getState();
+    sessionStarted(session);
+    userLoaded(user());
+    signedOut();
+    expect(useAuthStore.getState()).toMatchObject({
+      status: 'signedOut',
+      user: null,
+      accessToken: null,
+      accessTokenExpiresAt: null,
+      refreshToken: null,
+    });
+    expect(selectSessionRoute(useAuthStore.getState())).toBe('auth');
+  });
 });

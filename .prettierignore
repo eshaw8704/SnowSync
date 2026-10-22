@@ -5,6 +5,5 @@ package-lock.json
 apps/server/src/generated/
 apps/server/prisma/migrations/
 apps/mobile/.expo/
-apps/mobile/expo-env.d.ts
 apps/mobile/ios/
 apps/mobile/android/

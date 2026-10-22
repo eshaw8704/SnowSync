@@ -105,12 +105,16 @@ export function selectSessionRoute(state: AuthState): SessionRoute {
   }
 }
 
-/** True when the signed-in person currently has `permission` (UI hint only; the server decides). */
+/**
+ * True when the signed-in person currently has `permission` (UI hint only; the server decides).
+ * False unless signed in, so an unverified read-only session never shows privileged UI.
+ */
 export function selectHasPermission(permission: Permission) {
-  return (state: AuthState): boolean => state.user?.permissions.includes(permission) ?? false;
+  return (state: AuthState): boolean =>
+    state.status === 'signedIn' && (state.user?.permissions.includes(permission) ?? false);
 }
 
-/** True for Treasurer, Vice President and President. */
+/** True for Treasurer, Vice President and President. False unless signed in. */
 export function selectIsExecutive(state: AuthState): boolean {
-  return state.user ? isExecutiveRole(state.user.role) : false;
+  return state.status === 'signedIn' && state.user !== null && isExecutiveRole(state.user.role);
 }
