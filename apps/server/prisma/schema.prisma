@@ -10,22 +10,171 @@ datasource db {
   provider = "postgresql"
 }
 
-/// Club-level role. Must match UserRole in @snowsync/shared.
+/// Club-level role, lowest rank first. Must match UserRole in @snowsync/shared.
 enum UserRole {
   MEMBER
   OFFICER
+  TREASURER
+  VICE_PRESIDENT
+  PRESIDENT
 
   @@map("user_role")
 }
 
-/// One SnowSync account. Sprint 2 adds credentials and membership.
+/// Club membership of one account. Must match MembershipStatus in @snowsync/shared.
+enum MembershipStatus {
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  NOT_AUTHORIZED
+  DEACTIVATED
+
+  @@map("membership_status")
+}
+
+/// Activity a member prefers. Must match PREFERRED_ACTIVITIES in @snowsync/shared.
+enum PreferredActivity {
+  SKIING
+  SNOWBOARDING
+  BOTH
+
+  @@map("preferred_activity")
+}
+
+/// One SnowSync account. An account is not a membership: see membershipStatus.
 model User {
-  id          String   @id @default(uuid()) @db.Uuid
-  email       String   @unique
-  displayName String   @map("display_name")
-  role        UserRole @default(MEMBER)
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  id                        String             @id @default(uuid()) @db.Uuid
+  email                     String             @unique
+  displayName               String             @map("display_name")
+  role                      UserRole           @default(MEMBER)
+  /// argon2id hash. Null for accounts that only use Sac State SSO (Sprint 4).
+  passwordHash              String?            @map("password_hash")
+  failedSignInCount         Int                @default(0) @map("failed_sign_in_count")
+  signInLockedUntil         DateTime?          @map("sign_in_locked_until") @db.Timestamptz(3)
+  membershipStatus          MembershipStatus   @default(PENDING_APPROVAL) @map("membership_status")
+  membershipRequestedAt     DateTime           @default(now()) @map("membership_requested_at") @db.Timestamptz(3)
+  membershipDecidedAt       DateTime?          @map("membership_decided_at") @db.Timestamptz(3)
+  membershipDecidedById     String?            @map("membership_decided_by_id") @db.Uuid
+  membershipRejectionReason String?            @map("membership_rejection_reason")
+  preferredActivity         PreferredActivity? @map("preferred_activity")
+  onboardingCompletedAt     DateTime?          @map("onboarding_completed_at") @db.Timestamptz(3)
+  createdAt                 DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                 DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  refreshTokens           RefreshToken[]
+  passwordResetTokens     PasswordResetToken[]
+  emergencyContact        EmergencyContact?
+  notificationPreferences NotificationPreferences?
+  clubCodesCreated        ClubCode[]               @relation("ClubCodeCreatedBy")
+  clubCodesUsed           ClubCode[]               @relation("ClubCodeUsedBy")
+  auditLogs               AuditLog[]
+
+  @@index([membershipStatus])
+  @@map("users")
+}
+
+/// One refresh token. Only its SHA-256 hash is stored. Rotation keeps one family per sign-in.
+model RefreshToken {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  tokenHash    String    @unique @map("token_hash")
+  familyId     String    @map("family_id") @db.Uuid
+  expiresAt    DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt    DateTime? @map("revoked_at") @db.Timestamptz(3)
+  replacedById String?   @map("replaced_by_id") @db.Uuid
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId])
+  @@map("refresh_tokens")
+}
+
+/// One single-use password-reset link. Only its SHA-256 hash is stored.
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+/// One-time club code created by an officer. Only its SHA-256 hash is stored.
+model ClubCode {
+  id          String    @id @default(uuid()) @db.Uuid
+  codeHash    String    @unique @map("code_hash")
+  createdById String    @map("created_by_id") @db.Uuid
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(3)
+  usedAt      DateTime? @map("used_at") @db.Timestamptz(3)
+  usedById    String?   @map("used_by_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  createdBy User  @relation("ClubCodeCreatedBy", fields: [createdById], references: [id])
+  usedBy    User? @relation("ClubCodeUsedBy", fields: [usedById], references: [id])
+
+  @@map("club_codes")
+}
+
+/// Emergency contact: a separate, access-controlled table, never part of the public profile.
+model EmergencyContact {
+  userId       String   @id @map("user_id") @db.Uuid
+  name         String
+  relationship String
+  phone        String
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("emergency_contacts")
+}
+
+/// Optional-update choices. Trip-critical and safety notices are always delivered.
+model NotificationPreferences {
+  userId            String   @id @map("user_id") @db.Uuid
+  tripReminders     Boolean  @default(true) @map("trip_reminders")
+  clubAnnouncements Boolean  @default(true) @map("club_announcements")
+  fundraisers       Boolean  @default(false)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
+
+/// An executive's override of one permission for MEMBER or OFFICER. No row = shared default.
+model RolePermission {
+  role        UserRole
+  permission  String
+  granted     Boolean
+  updatedById String   @map("updated_by_id") @db.Uuid
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  @@map("users")
+  @@id([role, permission])
+  @@map("role_permissions")
+}
+
+/// Every administrative change: who, what, when, why, and the before/after values.
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  actorId    String   @map("actor_id") @db.Uuid
+  action     String
+  targetType String   @map("target_type")
+  targetId   String   @map("target_id")
+  reason     String?
+  before     Json?
+  after      Json?
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  actor User @relation(fields: [actorId], references: [id])
+
+  @@index([targetType, targetId])
+  @@index([createdAt])
+  @@map("audit_logs")
 }
