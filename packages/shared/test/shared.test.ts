@@ -70,7 +70,13 @@ describe('@snowsync/shared', () => {
       'NO_SHOW',
       'LEFT_EARLY',
     ]);
-    expect(Object.values(UserRole)).toEqual(['MEMBER', 'OFFICER']);
+    expect(Object.values(UserRole)).toEqual([
+      'MEMBER',
+      'OFFICER',
+      'TREASURER',
+      'VICE_PRESIDENT',
+      'PRESIDENT',
+    ]);
     expect(Object.values(ConnectionStatus)).toEqual([
       'ONLINE',
       'WEAK',
