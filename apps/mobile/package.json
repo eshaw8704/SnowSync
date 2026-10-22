@@ -20,12 +20,15 @@
     "expo-font": "~57.0.4",
     "expo-linking": "~57.0.12",
     "expo-router": "~57.0.26",
+    "expo-secure-store": "57.0.4",
     "expo-splash-screen": "~57.0.10",
     "expo-status-bar": "~57.0.1",
     "react": "19.2.3",
     "react-native": "0.86.3",
     "react-native-safe-area-context": "~5.7.0",
-    "react-native-screens": "~4.26.0"
+    "react-native-screens": "~4.26.0",
+    "zod": "^4.6.0",
+    "zustand": "^5.0.0"
   },
   "devDependencies": {
     "@testing-library/react-native": "^13.3.3",
