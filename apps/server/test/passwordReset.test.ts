@@ -24,6 +24,7 @@ describe('password reset', () => {
   beforeEach(async () => {
     await resetDatabase();
     sent.length = 0;
+
     setEmailSender({
       send: (message) => {
         sent.push(message);
@@ -39,12 +40,15 @@ describe('password reset', () => {
   it('answers the same whether or not the account exists', async () => {
     await createUser({ email: 'jacob@csus.edu' });
     const app = createApp();
+
     const known = await request(app)
       .post('/auth/forgot-password')
       .send({ email: 'jacob@csus.edu' });
+
     const unknown = await request(app)
       .post('/auth/forgot-password')
       .send({ email: 'ghost@csus.edu' });
+
     expect(known.status).toBe(202);
     expect(unknown.status).toBe(202);
     expect(known.body).toEqual(unknown.body);
@@ -57,54 +61,117 @@ describe('password reset', () => {
     const user = await createUser({ email: 'jacob@csus.edu' });
     const old = await issueSession(user.id);
     const app = createApp();
+
     await request(app).post('/auth/forgot-password').send({ email: 'jacob@csus.edu' });
+
     const token = lastToken();
 
     const reset = await request(app)
       .post('/auth/reset-password')
       .send({ token, password: 'Brand-New-Pass-2027' });
+
     expect(reset.status).toBe(200);
+
     expect(
       (await request(app).post('/auth/refresh').send({ refreshToken: old.refreshToken })).status,
     ).toBe(401);
-    const saved = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+
+    const saved = await prisma.user.findUniqueOrThrow({
+      where: { id: user.id },
+    });
+
     await expect(verifyPassword(saved.passwordHash, 'Brand-New-Pass-2027')).resolves.toBe(true);
+
     await expect(verifyPassword(saved.passwordHash, TEST_PASSWORD)).resolves.toBe(false);
 
     const again = await request(app)
       .post('/auth/reset-password')
       .send({ token, password: 'Another-Pass-2027' });
+
     expect(again.status).toBe(400);
-    expect(again.body.error.details).toEqual({ reason: 'RESET_TOKEN_INVALID' });
+    expect(again.body.error.details).toEqual({
+      reason: 'RESET_TOKEN_INVALID',
+    });
   });
 
   it('expires links after 30 minutes and requires 12 characters', async () => {
     await createUser({ email: 'jacob@csus.edu' });
     const app = createApp();
+
     await request(app).post('/auth/forgot-password').send({ email: 'jacob@csus.edu' });
+
     const token = lastToken();
+
     const short = await request(app)
       .post('/auth/reset-password')
       .send({ token, password: 'short' });
+
     expect(short.body.error.code).toBe('VALIDATION_FAILED');
+
     await prisma.passwordResetToken.updateMany({
       data: { expiresAt: new Date(Date.now() - 1000) },
     });
+
     const expired = await request(app)
       .post('/auth/reset-password')
       .send({ token, password: 'Long-Enough-2027' });
-    expect(expired.body.error.details).toEqual({ reason: 'RESET_TOKEN_INVALID' });
+
+    expect(expired.body.error.details).toEqual({
+      reason: 'RESET_TOKEN_INVALID',
+    });
   });
 
   it('a new request invalidates the previous link', async () => {
     await createUser({ email: 'jacob@csus.edu' });
     const app = createApp();
+
     await request(app).post('/auth/forgot-password').send({ email: 'jacob@csus.edu' });
+
     const first = lastToken();
+
     await request(app).post('/auth/forgot-password').send({ email: 'jacob@csus.edu' });
-    const res = await request(app)
-      .post('/auth/reset-password')
-      .send({ token: first, password: 'Long-Enough-2027' });
+
+    const res = await request(app).post('/auth/reset-password').send({
+      token: first,
+      password: 'Long-Enough-2027',
+    });
+
     expect(res.status).toBe(400);
+  });
+
+  it('returns the same response when email delivery fails and preserves the previous link', async () => {
+    await createUser({ email: 'jacob@csus.edu' });
+    const app = createApp();
+
+    // First, create a working password-reset link.
+    await request(app).post('/auth/forgot-password').send({ email: 'jacob@csus.edu' });
+
+    const previousToken = lastToken();
+
+    // Simulate an email delivery failure.
+    setEmailSender({
+      send: () => Promise.reject(new Error('Email delivery unavailable')),
+    });
+
+    const failed = await request(app)
+      .post('/auth/forgot-password')
+      .send({ email: 'jacob@csus.edu' });
+
+    const unknown = await request(app)
+      .post('/auth/forgot-password')
+      .send({ email: 'ghost@csus.edu' });
+
+    // Both responses must be identical.
+    expect(failed.status).toBe(202);
+    expect(unknown.status).toBe(202);
+    expect(failed.body).toEqual(unknown.body);
+
+    // The earlier link should still work.
+    const reset = await request(app).post('/auth/reset-password').send({
+      token: previousToken,
+      password: 'New-Secure-Password-2027',
+    });
+
+    expect(reset.status).toBe(200);
   });
 });

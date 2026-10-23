@@ -27,7 +27,14 @@ export const consoleEmailSender: EmailSender = {
   },
 };
 
-let currentSender: EmailSender = consoleEmailSender;
+const unavailableEmailSender: EmailSender = {
+  send() {
+    return Promise.reject(new Error('Production email sender is not configured'));
+  },
+};
+
+let currentSender: EmailSender =
+  env.NODE_ENV === 'production' ? unavailableEmailSender : consoleEmailSender;
 
 export function getEmailSender(): EmailSender {
   return currentSender;
