@@ -47,6 +47,7 @@ export function TextField({ label, error, helperText, testID, ...inputProps }: T
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         placeholderTextColor={colors.textMuted}
+        underlineColorAndroid="transparent"
         style={[styles.input, { borderColor }]}
       />
       {error ? (

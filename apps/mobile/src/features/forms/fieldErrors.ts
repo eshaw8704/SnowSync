@@ -9,7 +9,7 @@ export function fieldErrors(error: ZodError): Record<string, string> {
   const result: Record<string, string> = {};
   for (const issue of error.issues) {
     const key = issue.path.join('.');
-    if (key && !(key in result)) {
+    if (key && !Object.hasOwn(result, key)) {
       result[key] = issue.message;
     }
   }
@@ -21,14 +21,14 @@ export function serverFieldErrors(
   details: Record<string, unknown> | undefined,
 ): Record<string, string> {
   const issues = Array.isArray(details?.issues)
-    ? (details.issues as { path?: unknown; message?: unknown }[])
+    ? (details.issues as ({ path?: unknown; message?: unknown } | null)[])
     : [];
   const result: Record<string, string> = {};
   for (const issue of issues) {
     if (
-      typeof issue.path === 'string' &&
+      typeof issue?.path === 'string' &&
       typeof issue.message === 'string' &&
-      !(issue.path in result)
+      !Object.hasOwn(result, issue.path)
     ) {
       result[issue.path] = issue.message;
     }

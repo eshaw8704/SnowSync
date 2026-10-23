@@ -22,4 +22,12 @@ describe('fieldErrors', () => {
     });
     expect(serverFieldErrors(undefined)).toEqual({});
   });
+
+  it('skips null issues and keeps fields named like Object.prototype keys', () => {
+    expect(
+      serverFieldErrors({
+        issues: [null, { path: 'constructor', message: 'Bad' }],
+      }),
+    ).toEqual({ constructor: 'Bad' });
+  });
 });
