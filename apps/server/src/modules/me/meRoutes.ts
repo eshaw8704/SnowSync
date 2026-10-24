@@ -1,7 +1,15 @@
+import type { ApiSuccess, MeResponse } from '@snowsync/shared';
 import { Router } from 'express';
+import { requireAuth } from '../../middleware/requireAuth';
+import { getMe } from './meService';
 
-/**
- * GET /me. Empty until SS-100 (Eshanyadeep) fills it in.
- * Already mounted by src/routes.ts, so that task only replaces this file.
- */
 export const meRouter: Router = Router();
+
+meRouter.get('/', requireAuth, async (req, res) => {
+  const body: ApiSuccess<MeResponse> = {
+    ok: true,
+    data: await getMe(req.auth!.userId),
+  };
+
+  res.json(body);
+});
