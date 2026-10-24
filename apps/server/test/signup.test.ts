@@ -1,9 +1,16 @@
 import request from 'supertest';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app';
 import { prisma } from '../src/db/prisma';
+import { issueSession } from '../src/modules/auth/tokenService';
+import type * as TokenService from '../src/modules/auth/tokenService';
 import { resetDatabase } from './helpers/db';
 import { createUser } from './helpers/factories';
+
+vi.mock('../src/modules/auth/tokenService', async (importOriginal) => {
+  const actual = await importOriginal<typeof TokenService>();
+  return { ...actual, issueSession: vi.fn(actual.issueSession) };
+});
 
 const valid = {
   displayName: 'Jacob Stevens',
@@ -51,5 +58,14 @@ describe('POST /auth/signup', () => {
     expect(res.status).toBe(409);
     expect(res.body.error).toMatchObject({ code: 'CONFLICT', details: { reason: 'EMAIL_TAKEN' } });
     expect(await prisma.user.count()).toBe(1);
+  });
+
+  it('rolls the account back when the session cannot be issued', async () => {
+    vi.mocked(issueSession).mockRejectedValueOnce(new Error('token store down'));
+    const res = await request(createApp()).post('/auth/signup').send(valid);
+    expect(res.status).toBe(500);
+    expect(await prisma.user.count()).toBe(0);
+    const retry = await request(createApp()).post('/auth/signup').send(valid);
+    expect(retry.status).toBe(201);
   });
 });

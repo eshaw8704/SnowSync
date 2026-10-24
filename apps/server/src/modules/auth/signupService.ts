@@ -29,16 +29,20 @@ export async function signUp(input: SignupRequest): Promise<AuthSession> {
   }
   const passwordHash = await hashPassword(input.password);
   try {
-    const user = await prisma.user.create({
-      data: {
-        email: input.email,
-        displayName: input.displayName,
-        passwordHash,
-        role: 'MEMBER',
-        membershipStatus: 'PENDING_APPROVAL',
-      },
+    // One transaction: if the session cannot be issued, the account is rolled back too.
+    const session = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email: input.email,
+          displayName: input.displayName,
+          passwordHash,
+          role: 'MEMBER',
+          membershipStatus: 'PENDING_APPROVAL',
+        },
+      });
+      return issueSession(user.id, undefined, tx);
     });
-    return toAuthSession(await issueSession(user.id));
+    return toAuthSession(session);
   } catch (error) {
     // Two sign-ups with the same email at the same moment: the database's unique index decides.
     if (isUniqueViolation(error)) {
