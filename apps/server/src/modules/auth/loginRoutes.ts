@@ -1,7 +1,12 @@
+import { loginRequestSchema, type ApiSuccess, type AuthSession } from '@snowsync/shared';
 import { Router } from 'express';
+import { logIn } from './loginService';
 
-/**
- * POST /auth/login. Empty until SS-96 (Elijah) fills it in.
- * Already mounted by src/routes.ts, so that task only replaces this file.
- */
+// Post /auth/login returns new session or error
 export const loginRouter: Router = Router();
+
+loginRouter.post('/login', async (req, res) => {
+  const session = await logIn(loginRequestSchema.parse(req.body));
+  const body: ApiSuccess<AuthSession> = { ok: true, data: session };
+  res.json(body);
+});
