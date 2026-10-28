@@ -35,6 +35,8 @@ export const colors = {
   warningBorder: '#F5E2D6',
   /** Circle behind the error-state icon. */
   warningIconFill: '#E4C7AF',
+  /** Dim layer behind dialogs (charcoal at 45 % opacity). */
+  scrim: 'rgba(24, 43, 39, 0.45)',
   /** Card shadow color (used with shadow.card opacity). */
   shadow: '#123C26',
 } as const;
