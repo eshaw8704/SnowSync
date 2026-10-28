@@ -27,6 +27,8 @@ export interface ApiRequestOptions {
   body?: unknown;
   /** Overrides REQUEST_TIMEOUT_MS for this call. */
   timeoutMs?: number;
+  /** Extra request headers, e.g. Authorization (added by authClient in Sprint 2). */
+  headers?: Record<string, string>;
 }
 
 /**
@@ -70,6 +72,7 @@ export async function apiRequest<T>(
       headers: {
         Accept: 'application/json',
         ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        ...options.headers,
       },
       body: requestBody,
       signal: controller.signal,

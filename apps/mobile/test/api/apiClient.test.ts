@@ -1,6 +1,6 @@
 import { ApiClientError, apiRequest } from '../../src/api/apiClient';
 
-/** Builds a minimal fetch Response stand-in. */
+//Builds a minimal fetch Response stand-in.
 function jsonResponse(status: number, body: unknown): Response {
   return { status, json: () => Promise.resolve(body) } as unknown as Response;
 }
@@ -24,6 +24,15 @@ describe('apiRequest', () => {
       expect.stringMatching(/\/health$/),
       expect.objectContaining({ method: 'GET' }),
     );
+  });
+
+  it('sends extra headers such as Authorization', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, { ok: true, data: null }));
+    await apiRequest('GET', '/me', { headers: { Authorization: 'Bearer abc' } });
+    expect(fetchMock.mock.calls[0]?.[1]?.headers).toEqual({
+      Accept: 'application/json',
+      Authorization: 'Bearer abc',
+    });
   });
 
   it('returns data when ok is true even with a 503 status', async () => {
