@@ -66,8 +66,9 @@ export async function redeemClubCode(
         'That code has already been used. Ask an officer for a new one.',
       );
     }
-    await tx.user.update({
-      where: { id: userId },
+    // Conditional update: two codes redeemed at once by the same person cannot both succeed.
+    const approved = await tx.user.updateMany({
+      where: { id: userId, membershipStatus: { not: 'APPROVED' } },
       data: {
         membershipStatus: 'APPROVED',
         membershipDecidedAt: new Date(),
@@ -75,6 +76,9 @@ export async function redeemClubCode(
         membershipRejectionReason: null,
       },
     });
+    if (approved.count === 0) {
+      throw codeError('ALREADY_APPROVED', 'Your membership is already approved.');
+    }
     await recordAudit(
       {
         actorId: userId,
