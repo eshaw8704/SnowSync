@@ -3,7 +3,7 @@ import { useAuthStore } from '../state/authStore';
 import { ApiClientError, apiRequest, type ApiRequestOptions, type HttpMethod } from './apiClient';
 
 /**
- * Like apiRequest, for endpoints that need a signed-in person: adds `Authorization: Bearer …`.
+Like apiRequest, for endpoints that need a signed-in person: adds `Authorization: Bearer …`.
  * If the server answers UNAUTHORIZED, it refreshes the session once (shared by all concurrent
  * requests) and retries the request one time. If the refresh is refused, the app moves to EXPIRED.
  */
@@ -33,6 +33,7 @@ function sendWithToken<T>(
   const token = useAuthStore.getState().accessToken;
   return apiRequest<T>(method, path, {
     ...options,
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    // Keep any headers the caller passed and add the bearer token on top.
+    headers: { ...options.headers, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
   });
 }

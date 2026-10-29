@@ -4,12 +4,21 @@ import { authRequest } from '../../api/authClient';
 import { useAuthStore } from '../../state/authStore';
 import { tokenStorage } from './tokenStorage';
 
-//true when the req never reached the server(no signla, server down, timeout).
-
+//True when the request never reached the server (no signal, server down, timeout).
 function isOffline(error: unknown): boolean {
   return (
     error instanceof ApiClientError && (error.code === 'NETWORK_ERROR' || error.code === 'TIMEOUT')
   );
+}
+
+let storageQueue: Promise<unknown> = Promise.resolve();
+
+//Runs secure-storage writes one at a time, in the order they were requested, so a slow token
+//save can never finish after a later sign-out has cleared the device.
+function queueStorage(task: () => Promise<void>): Promise<void> {
+  const next = storageQueue.then(task);
+  storageQueue = next.catch(() => undefined);
+  return next;
 }
 
 let refreshInFlight: Promise<boolean> | null = null;
@@ -54,7 +63,14 @@ export async function loadMe(): Promise<MeResponse> {
 //Runs once at launch: no saved token → signed out; token accepted → signed in and /me loaded;
 //server unreachable → UNVERIFIED with the cached user; token refused → signed out.
 export async function restoreSession(): Promise<void> {
-  const refreshToken = await tokenStorage.readRefreshToken();
+  let refreshToken: string | null;
+  try {
+    refreshToken = await tokenStorage.readRefreshToken();
+  } catch {
+    // A secure-storage read failure must not leave the app on the restoring screen.
+    useAuthStore.getState().signedOut();
+    return;
+  }
   if (!refreshToken) {
     useAuthStore.getState().signedOut();
     return;
@@ -67,10 +83,17 @@ export async function restoreSession(): Promise<void> {
     await loadMe();
   } catch (error) {
     if (isOffline(error)) {
-      useAuthStore.getState().sessionUnverified(await tokenStorage.readCachedUser());
+      let cachedUser: MeResponse | null = null;
+      try {
+        cachedUser = await tokenStorage.readCachedUser();
+      } catch {
+        // No readable cache: show the unverified screen without a cached profile.
+      }
+      useAuthStore.getState().sessionUnverified(cachedUser);
       return;
     }
-    await tokenStorage.clear();
+    // Even if clearing fails, the person must still land on the sign-in screen.
+    await queueStorage(() => tokenStorage.clear()).catch(() => undefined);
     useAuthStore.getState().signedOut();
   }
 }
@@ -86,19 +109,24 @@ export async function signOut(): Promise<void> {
       // Offline sign-out still clears this device; the server token expires on its own.
     }
   }
-  await tokenStorage.clear();
+  await queueStorage(() => tokenStorage.clear()).catch(() => undefined);
   useAuthStore.getState().signedOut();
 }
 
-//keeps secure storage in sync with the store and loads the user after every sign-in. Screens only
+//Keeps secure storage in sync with the store and loads the user after every sign-in. Screens only
 //call `useAuthStore.getState().sessionStarted(session)`; this does the rest. Returns an unsubscribe.
 export function startSessionSync(): () => void {
   return useAuthStore.subscribe((state, previous) => {
-    if (state.refreshToken && state.refreshToken !== previous.refreshToken) {
-      void tokenStorage.saveRefreshToken(state.refreshToken);
+    const token = state.refreshToken;
+    if (token && token !== previous.refreshToken) {
+      queueStorage(() => tokenStorage.saveRefreshToken(token)).catch(() => {
+        // A failed save is retried on the next refresh; the in-memory session still works.
+      });
     }
     if (state.status === 'expired' && previous.status !== 'expired') {
-      void tokenStorage.clear();
+      queueStorage(() => tokenStorage.clear()).catch(() => {
+        // Nothing more to do: the store already moved to EXPIRED.
+      });
     }
     if (state.status === 'signedIn' && !state.user && previous.status !== 'signedIn') {
       loadMe().catch(() => {

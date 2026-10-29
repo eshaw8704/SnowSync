@@ -83,6 +83,16 @@ describe('restoreSession', () => {
     expect(useAuthStore.getState().status).toBe('signedOut');
     await expect(tokenStorage.readRefreshToken()).resolves.toBeNull();
   });
+
+  it('signs out instead of hanging when secure storage cannot be read', async () => {
+    const readSpy = jest
+      .spyOn(tokenStorage, 'readRefreshToken')
+      .mockRejectedValueOnce(new Error('keychain'));
+    await restoreSession();
+    expect(useAuthStore.getState().status).toBe('signedOut');
+    expect(fetchMock).not.toHaveBeenCalled();
+    readSpy.mockRestore();
+  });
 });
 
 describe('authRequest and refreshSession', () => {
@@ -125,6 +135,16 @@ describe('authRequest and refreshSession', () => {
     await expect(refreshSession()).resolves.toBe(false);
     expect(useAuthStore.getState().status).toBe('signedIn');
   });
+
+  it('keeps caller headers when it adds the bearer token', async () => {
+    useAuthStore.getState().sessionStarted(session(1));
+    fetchMock.mockResolvedValue(reply(200, { ok: true, data: 'ok' }));
+    await authRequest('GET', '/x', { headers: { 'X-Test': '1' } });
+    expect(fetchMock.mock.calls[0]?.[1]?.headers).toMatchObject({
+      'X-Test': '1',
+      Authorization: 'Bearer access-1',
+    });
+  });
 });
 
 describe('startSessionSync and signOut', () => {
@@ -149,5 +169,29 @@ describe('startSessionSync and signOut', () => {
     });
     expect(useAuthStore.getState().status).toBe('signedOut');
     await expect(tokenStorage.readRefreshToken()).resolves.toBeNull();
+  });
+
+  it('never lets a late token save land after sign-out', async () => {
+    const realSave = tokenStorage.saveRefreshToken;
+    const saveSpy = jest
+      .spyOn(tokenStorage, 'saveRefreshToken')
+      .mockImplementation(async (token: string) => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        await realSave(token);
+      });
+    const stop = startSessionSync();
+    fetchMock.mockImplementation((url: string) =>
+      Promise.resolve(
+        url.endsWith('/me')
+          ? reply(200, { ok: true, data: me })
+          : reply(200, { ok: true, data: { signedOut: true } }),
+      ),
+    );
+    useAuthStore.getState().sessionStarted(session(5));
+    await signOut();
+    expect(useAuthStore.getState().status).toBe('signedOut');
+    await expect(tokenStorage.readRefreshToken()).resolves.toBeNull();
+    stop();
+    saveSpy.mockRestore();
   });
 });
