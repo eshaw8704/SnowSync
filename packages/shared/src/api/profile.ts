@@ -22,7 +22,14 @@ export const emergencyContactSchema = z.object({
   phone: z
     .string()
     .trim()
-    .regex(/^\+?[0-9 ()-]{7,20}$/, { message: 'Enter a phone number with 7 to 20 digits.' }),
+    .regex(/^\+?[0-9 ()-]+$/, { message: 'Enter a valid phone number.' })
+    .refine(
+      (phone) => {
+        const digitCount = phone.replace(/\D/g, '').length;
+        return digitCount >= 7 && digitCount <= 20;
+      },
+      { message: 'Enter a phone number with 7 to 20 digits.' },
+    ),
 });
 export type EmergencyContact = z.infer<typeof emergencyContactSchema>;
 

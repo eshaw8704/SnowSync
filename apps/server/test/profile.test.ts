@@ -49,6 +49,12 @@ describe('profile, emergency contact, preferences and onboarding', () => {
       .set('Authorization', header)
       .send({ ...contact, phone: 'x' });
     expect(bad.status).toBe(400);
+
+    const tooFewDigits = await request(app)
+      .put('/me/emergency-contact')
+      .set('Authorization', header)
+      .send({ ...contact, phone: '(12) 34-5' });
+    expect(tooFewDigits.status).toBe(400);
   });
 
   it('returns default notification preferences, then saved ones', async () => {
