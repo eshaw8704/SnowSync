@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { router } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 import { BrandHeader } from '../../components/BrandHeader';
 import { Button } from '../../components/Button';
@@ -21,7 +22,7 @@ export interface OnboardingStepProps {
   primaryLoading?: boolean;
 }
 
-/** The frame of every onboarding screen: header, "N of 7" progress bar, content and one primary action. */
+/** The frame of every onboarding screen: header, "N of 7" progress bar, content and navigation actions. */
 export function OnboardingStep({
   step,
   title,
@@ -32,9 +33,17 @@ export function OnboardingStep({
   primaryLoading,
 }: OnboardingStepProps) {
   const progress = `${step} of ${ONBOARDING_STEP_COUNT}`;
+
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    }
+  };
+
   return (
     <Screen scroll>
       <BrandHeader eyebrow="ONBOARDING" title={title} subtitle={subtitle} />
+
       <View
         accessible
         accessibilityRole="progressbar"
@@ -49,14 +58,38 @@ export function OnboardingStep({
           {progress}
         </Text>
       </View>
+
       {children}
-      <Button label={primaryLabel} onPress={onPrimary} loading={primaryLoading} />
+
+      {step > 1 ? (
+        <View style={styles.actions}>
+          <View style={styles.backButton}>
+            <Button
+              label="Back"
+              variant="secondary"
+              onPress={handleBack}
+              disabled={primaryLoading}
+              testID="onboarding-back-button"
+            />
+          </View>
+
+          <View style={styles.continueButton}>
+            <Button label={primaryLabel} onPress={onPrimary} loading={primaryLoading} />
+          </View>
+        </View>
+      ) : (
+        <Button label={primaryLabel} onPress={onPrimary} loading={primaryLoading} />
+      )}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  progressRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  progressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
   track: {
     flex: 1,
     height: 6,
@@ -64,5 +97,19 @@ const styles = StyleSheet.create({
     backgroundColor: colors.subtleFill,
     overflow: 'hidden',
   },
-  fill: { height: 6, borderRadius: radii.pill, backgroundColor: colors.brandGreen },
+  fill: {
+    height: 6,
+    borderRadius: radii.pill,
+    backgroundColor: colors.brandGreen,
+  },
+  actions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  backButton: {
+    flex: 1,
+  },
+  continueButton: {
+    flex: 2,
+  },
 });
