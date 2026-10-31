@@ -1,4 +1,3 @@
-
 import {
   CONFIGURABLE_ROLES,
   PERMISSION_KEYS,
@@ -29,9 +28,7 @@ const CURRENT_SPRINT = 2;
 const MAX_REASON_LENGTH = 500;
 
 type LoadState =
-  | { kind: 'loading' }
-  | { kind: 'failed' }
-  | { kind: 'loaded'; data: RolePermissionsResponse };
+  { kind: 'loading' } | { kind: 'failed' } | { kind: 'loaded'; data: RolePermissionsResponse };
 
 /**
  * Executive-only screen where the Treasurer, Vice President or President
@@ -67,10 +64,7 @@ export function RolePermissionsScreen() {
   const current = draft ?? saved;
 
   const changed = useMemo(
-    () =>
-      !!draft &&
-      !!saved &&
-      PERMISSION_KEYS.some((key) => draft[key] !== saved[key]),
+    () => !!draft && !!saved && PERMISSION_KEYS.some((key) => draft[key] !== saved[key]),
     [draft, saved],
   );
 
@@ -130,9 +124,7 @@ export function RolePermissionsScreen() {
       );
     } catch (error) {
       setReasonError(
-        error instanceof ApiClientError
-          ? error.message
-          : 'Could not save. Try again.',
+        error instanceof ApiClientError ? error.message : 'Could not save. Try again.',
       );
     } finally {
       savingRef.current = false;
@@ -156,10 +148,7 @@ export function RolePermissionsScreen() {
   if (state.kind === 'loading') {
     return (
       <Screen>
-        <LoadingSkeleton
-          lines={4}
-          accessibilityLabel="Loading role permissions"
-        />
+        <LoadingSkeleton lines={4} accessibilityLabel="Loading role permissions" />
       </Screen>
     );
   }
@@ -187,8 +176,8 @@ export function RolePermissionsScreen() {
       </Text>
 
       <Text color="textMuted">
-        Treasurer, Vice President and President always have every permission.
-        Choose what Members and Officers can do.
+        Treasurer, Vice President and President always have every permission. Choose what Members
+        and Officers can do.
       </Text>
 
       <View style={styles.tabs} accessibilityRole="tablist">
@@ -208,10 +197,7 @@ export function RolePermissionsScreen() {
               (saving || confirming) && styles.disabled,
             ]}
           >
-            <Text
-              variant="label"
-              color={role === option ? 'textOnBrand' : 'textPrimary'}
-            >
+            <Text variant="label" color={role === option ? 'textOnBrand' : 'textPrimary'}>
               {ROLE_LABELS[option]}
             </Text>
           </Pressable>
