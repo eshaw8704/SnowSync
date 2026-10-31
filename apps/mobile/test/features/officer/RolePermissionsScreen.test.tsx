@@ -19,6 +19,16 @@ const data = {
   locked: { MEMBER: [], OFFICER: ['MONITOR_TRIPS' as const] },
 };
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+
+  return { promise, resolve };
+}
+
 function signInAs(role: MeResponse['role']) {
   useAuthStore.getState().sessionStarted({
     accessToken: 'test-access-token',
@@ -47,54 +57,184 @@ describe('RolePermissionsScreen', () => {
 
   it('is forbidden for non-executives and never loads data', () => {
     signInAs('OFFICER');
+
     render(<RolePermissionsScreen />);
+
     expect(
       screen.getByText(
         'Only the Treasurer, Vice President and President can change role permissions.',
       ),
     ).toBeTruthy();
+
     expect(fetchRolePermissions).not.toHaveBeenCalled();
   });
 
   it('shows locked and future permissions for officers', async () => {
     signInAs('PRESIDENT');
+
     render(<RolePermissionsScreen />);
+
     expect(await screen.findByText('Always on for safety')).toBeTruthy();
     expect(screen.getByLabelText('Monitor live trips')).toBeDisabled();
+
     expect(screen.getAllByText('Takes effect in Sprint 3').length).toBeGreaterThan(0);
   });
 
   it('saves a member permission with a required reason', async () => {
     signInAs('TREASURER');
-    jest
-      .mocked(updateRolePermissions)
-      .mockImplementation((request) =>
-        Promise.resolve({ ...data, roles: { ...data.roles, [request.role]: request.permissions } }),
-      );
+
+    jest.mocked(updateRolePermissions).mockImplementation((request) =>
+      Promise.resolve({
+        ...data,
+        roles: {
+          ...data.roles,
+          [request.role]: request.permissions,
+        },
+      }),
+    );
 
     render(<RolePermissionsScreen />);
+
     fireEvent.press(await screen.findByRole('tab', { name: 'Member' }));
+
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+
     fireEvent(screen.getByLabelText('Review membership requests'), 'valueChange', true);
+
     fireEvent.press(screen.getByRole('button', { name: 'Save changes' }));
+
     fireEvent.press(screen.getByRole('button', { name: 'Save permissions' }));
+
     expect(await screen.findByText('Say why you are changing these permissions.')).toBeTruthy();
+
     fireEvent.changeText(
       screen.getByLabelText('Reason for change'),
       'Trip leads help with approvals',
     );
+
     fireEvent.press(screen.getByRole('button', { name: 'Save permissions' }));
+
     await waitFor(() =>
       expect(updateRolePermissions).toHaveBeenCalledWith({
         role: 'MEMBER',
-        permissions: { ...DEFAULT_ROLE_PERMISSIONS.MEMBER, REVIEW_MEMBERSHIPS: true },
+        permissions: {
+          ...DEFAULT_ROLE_PERMISSIONS.MEMBER,
+          REVIEW_MEMBERSHIPS: true,
+        },
         reason: 'Trip leads help with approvals',
       }),
     );
+
     expect(
       await screen.findByText(
         "Member permissions saved. They apply on each person's next request.",
       ),
     ).toBeTruthy();
+  });
+
+  it('prevents cancelling or switching roles while saving permissions', async () => {
+    signInAs('PRESIDENT');
+
+    const request = deferred<Awaited<ReturnType<typeof updateRolePermissions>>>();
+
+    jest.mocked(updateRolePermissions).mockReturnValue(request.promise);
+
+    render(<RolePermissionsScreen />);
+
+    fireEvent.press(await screen.findByRole('tab', { name: 'Member' }));
+
+    fireEvent(screen.getByLabelText('Review membership requests'), 'valueChange', true);
+
+    fireEvent.press(screen.getByRole('button', { name: 'Save changes' }));
+
+    fireEvent.changeText(
+      screen.getByLabelText('Reason for change'),
+      'Allow member approval assistance',
+    );
+
+    fireEvent.press(screen.getByRole('button', { name: 'Save permissions' }));
+
+    await waitFor(() => expect(updateRolePermissions).toHaveBeenCalledTimes(1));
+
+    // Role selection must remain locked while the request is pending.
+    expect(screen.getByRole('tab', { name: 'Officer' })).toBeDisabled();
+
+    // Attempting to cancel must not dismiss the active save.
+    fireEvent.press(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.getByLabelText('Reason for change')).toBeTruthy();
+
+    expect(updateRolePermissions).toHaveBeenCalledWith({
+      role: 'MEMBER',
+      permissions: {
+        ...DEFAULT_ROLE_PERMISSIONS.MEMBER,
+        REVIEW_MEMBERSHIPS: true,
+      },
+      reason: 'Allow member approval assistance',
+    });
+
+    request.resolve({
+      ...data,
+      roles: {
+        ...data.roles,
+        MEMBER: {
+          ...DEFAULT_ROLE_PERMISSIONS.MEMBER,
+          REVIEW_MEMBERSHIPS: true,
+        },
+      },
+    });
+
+    expect(
+      await screen.findByText(
+        "Member permissions saved. They apply on each person's next request.",
+      ),
+    ).toBeTruthy();
+
+    expect(updateRolePermissions).toHaveBeenCalledTimes(1);
+  });
+
+  it('limits permission change reasons to 500 characters', async () => {
+    signInAs('TREASURER');
+
+    jest.mocked(updateRolePermissions).mockImplementation((request) =>
+      Promise.resolve({
+        ...data,
+        roles: {
+          ...data.roles,
+          [request.role]: request.permissions,
+        },
+      }),
+    );
+
+    render(<RolePermissionsScreen />);
+
+    fireEvent.press(await screen.findByRole('tab', { name: 'Member' }));
+
+    fireEvent(screen.getByLabelText('Review membership requests'), 'valueChange', true);
+
+    fireEvent.press(screen.getByRole('button', { name: 'Save changes' }));
+
+    const longReason = 'A'.repeat(550);
+
+    fireEvent.changeText(screen.getByLabelText('Reason for change'), longReason);
+
+    expect(screen.getByLabelText('Reason for change').props.value).toHaveLength(500);
+
+    expect(screen.getByText('500 / 500 characters')).toBeTruthy();
+
+    fireEvent.press(screen.getByRole('button', { name: 'Save permissions' }));
+
+    await waitFor(() =>
+      expect(updateRolePermissions).toHaveBeenCalledWith({
+        role: 'MEMBER',
+        permissions: {
+          ...DEFAULT_ROLE_PERMISSIONS.MEMBER,
+          REVIEW_MEMBERSHIPS: true,
+        },
+        reason: 'A'.repeat(500),
+      }),
+    );
+
+    expect(updateRolePermissions).toHaveBeenCalledTimes(1);
   });
 });

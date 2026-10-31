@@ -7,7 +7,7 @@ import {
 } from '@snowsync/shared';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { Card } from '../../components/Card';
 import { ErrorState } from '../../components/ErrorState';
 import { Text } from '../../components/Text';
@@ -41,14 +41,22 @@ export function ProfileStep() {
   const [saving, setSaving] = useState(false);
 
   const save = async () => {
-    const parsed = profileSchema.safeParse({ displayName, preferredActivity: activity });
+    if (saving) return;
+
+    const parsed = profileSchema.safeParse({
+      displayName,
+      preferredActivity: activity,
+    });
+
     if (!parsed.success) {
       setErrors(fieldErrors(parsed.error));
       return;
     }
+
     setErrors({});
     setFailed(false);
     setSaving(true);
+
     try {
       await saveProfile(parsed.data);
       router.push('/emergency-contact');
@@ -71,13 +79,16 @@ export function ProfileStep() {
       {failed ? (
         <ErrorState variant="network" actionLabel="Try again" onAction={() => void save()} />
       ) : null}
+
       <TextField
         label="Full name"
         value={displayName}
         onChangeText={setDisplayName}
         error={errors.displayName}
       />
+
       <Text variant="label">Preferred activity</Text>
+
       <View style={styles.options} accessibilityRole="radiogroup">
         {(Object.keys(ACTIVITY_LABELS) as PreferredActivity[]).map((key) => (
           <Pressable
@@ -105,29 +116,63 @@ export function EmergencyContactStep() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [failed, setFailed] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
-    fetchEmergencyContact().then(
-      (contact) => {
+    let active = true;
+
+    const load = async () => {
+      setLoading(true);
+      setLoadError(false);
+
+      try {
+        const contact = await fetchEmergencyContact();
+
+        if (!active) return;
+
         if (contact) {
           setName(contact.name);
           setRelationship(contact.relationship);
           setPhone(contact.phone);
         }
-      },
-      () => undefined,
-    );
-  }, []);
+      } catch {
+        if (active) {
+          setLoadError(true);
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void load();
+
+    return () => {
+      active = false;
+    };
+  }, [retryCount]);
 
   const save = async () => {
-    const parsed = emergencyContactSchema.safeParse({ name, relationship, phone });
+    if (loading || loadError || saving) return;
+
+    const parsed = emergencyContactSchema.safeParse({
+      name,
+      relationship,
+      phone,
+    });
+
     if (!parsed.success) {
       setErrors(fieldErrors(parsed.error));
       return;
     }
+
     setErrors({});
     setFailed(false);
     setSaving(true);
+
     try {
       await saveEmergencyContact(parsed.data);
       router.push('/notifications');
@@ -146,41 +191,64 @@ export function EmergencyContactStep() {
       primaryLabel="Save & continue"
       onPrimary={() => void save()}
       primaryLoading={saving}
+      primaryDisabled={loading || loadError}
     >
-      {failed ? (
-        <ErrorState variant="network" actionLabel="Try again" onAction={() => void save()} />
-      ) : null}
-      <TextField
-        label="Contact name"
-        value={name}
-        onChangeText={setName}
-        error={errors.name}
-        autoComplete="name"
-      />
-      <TextField
-        label="Relationship"
-        value={relationship}
-        onChangeText={setRelationship}
-        error={errors.relationship}
-      />
-      <TextField
-        label="Phone"
-        value={phone}
-        onChangeText={setPhone}
-        error={errors.phone}
-        keyboardType="phone-pad"
-        autoComplete="tel"
-        textContentType="telephoneNumber"
-      />
-      <Card>
-        <Text variant="label" color="textMuted">
-          IMPORTANT
-        </Text>
-        <Text>
-          This contact is visible only to authorized club officers for safety. Keep it current.
-          SnowSync is not a replacement for emergency services.
-        </Text>
-      </Card>
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator
+            color={colors.brandGreen}
+            accessibilityLabel="Loading emergency contact"
+          />
+          <Text color="textMuted">Loading emergency contact...</Text>
+        </View>
+      ) : loadError ? (
+        <ErrorState
+          variant="network"
+          actionLabel="Retry loading"
+          onAction={() => setRetryCount((count) => count + 1)}
+        />
+      ) : (
+        <>
+          {failed ? (
+            <ErrorState variant="network" actionLabel="Try again" onAction={() => void save()} />
+          ) : null}
+
+          <TextField
+            label="Contact name"
+            value={name}
+            onChangeText={setName}
+            error={errors.name}
+            autoComplete="name"
+          />
+
+          <TextField
+            label="Relationship"
+            value={relationship}
+            onChangeText={setRelationship}
+            error={errors.relationship}
+          />
+
+          <TextField
+            label="Phone"
+            value={phone}
+            onChangeText={setPhone}
+            error={errors.phone}
+            keyboardType="phone-pad"
+            autoComplete="tel"
+            textContentType="telephoneNumber"
+          />
+
+          <Card>
+            <Text variant="label" color="textMuted">
+              IMPORTANT
+            </Text>
+            <Text>
+              This contact is visible only to authorized club officers for safety. Keep it current.
+              SnowSync is not a replacement for emergency services.
+            </Text>
+          </Card>
+        </>
+      )}
     </OnboardingStep>
   );
 }
@@ -192,17 +260,56 @@ export function NotificationsStep() {
   });
   const [failed, setFailed] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
-    fetchNotificationPreferences().then(setPreferences, () => undefined);
-  }, []);
+    let active = true;
 
-  const set = (key: keyof NotificationPreferences) => (value: boolean) =>
-    setPreferences((current) => ({ ...current, [key]: value }));
+    const load = async () => {
+      setLoading(true);
+      setLoadError(false);
+
+      try {
+        const savedPreferences = await fetchNotificationPreferences();
+
+        if (active) {
+          setPreferences(savedPreferences);
+        }
+      } catch {
+        if (active) {
+          setLoadError(true);
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void load();
+
+    return () => {
+      active = false;
+    };
+  }, [retryCount]);
+
+  const set = (key: keyof NotificationPreferences) => (value: boolean) => {
+    if (loading || loadError || saving) return;
+
+    setPreferences((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  };
 
   const save = async () => {
+    if (loading || loadError || saving) return;
+
     setFailed(false);
     setSaving(true);
+
     try {
       await saveNotificationPreferences(preferences);
       router.push('/location-privacy');
@@ -221,36 +328,64 @@ export function NotificationsStep() {
       primaryLabel="Save preferences"
       onPrimary={() => void save()}
       primaryLoading={saving}
+      primaryDisabled={loading || loadError}
     >
-      {failed ? (
-        <ErrorState variant="network" actionLabel="Try again" onAction={() => void save()} />
-      ) : null}
-      <Card>
-        <ToggleRow
-          label="Trip & check-in reminders"
-          description="Important trip-day coordination"
-          value={preferences.tripReminders}
-          onValueChange={set('tripReminders')}
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator
+            color={colors.brandGreen}
+            accessibilityLabel="Loading notification preferences"
+          />
+          <Text color="textMuted">Loading notification preferences...</Text>
+        </View>
+      ) : loadError ? (
+        <ErrorState
+          variant="network"
+          actionLabel="Retry loading"
+          onAction={() => setRetryCount((count) => count + 1)}
         />
-        <ToggleRow
-          label="Club announcements"
-          description="Meetings and club updates"
-          value={preferences.clubAnnouncements}
-          onValueChange={set('clubAnnouncements')}
-        />
-        <ToggleRow
-          label="Fundraisers"
-          description="Optional club messages"
-          value={preferences.fundraisers}
-          onValueChange={set('fundraisers')}
-        />
-      </Card>
+      ) : (
+        <>
+          {failed ? (
+            <ErrorState variant="network" actionLabel="Try again" onAction={() => void save()} />
+          ) : null}
+
+          <Card>
+            <ToggleRow
+              label="Trip & check-in reminders"
+              description="Important trip-day coordination"
+              value={preferences.tripReminders}
+              onValueChange={set('tripReminders')}
+              disabled={saving}
+            />
+
+            <ToggleRow
+              label="Club announcements"
+              description="Meetings and club updates"
+              value={preferences.clubAnnouncements}
+              onValueChange={set('clubAnnouncements')}
+              disabled={saving}
+            />
+
+            <ToggleRow
+              label="Fundraisers"
+              description="Optional club messages"
+              value={preferences.fundraisers}
+              onValueChange={set('fundraisers')}
+              disabled={saving}
+            />
+          </Card>
+        </>
+      )}
     </OnboardingStep>
   );
 }
 
 const styles = StyleSheet.create({
-  options: { flexDirection: 'row', gap: spacing.sm },
+  options: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
   option: {
     flex: 1,
     minHeight: sizes.minTouchTargetAndroid,
@@ -261,5 +396,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.surface,
   },
-  optionSelected: { backgroundColor: colors.brandGreen, borderColor: colors.brandGreen },
+  optionSelected: {
+    backgroundColor: colors.brandGreen,
+    borderColor: colors.brandGreen,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.lg,
+  },
 });

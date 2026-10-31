@@ -7,10 +7,20 @@ import { Screen } from '../../components/Screen';
 import { Text } from '../../components/Text';
 import { colors, radii, spacing } from '../../theme';
 
-/** Total number of onboarding steps (Figma catalog 04 · 2 shows "1 of 7" … "7 of 7"). */
+/** Total number of onboarding steps. */
 export const ONBOARDING_STEP_COUNT = 7;
 
-/** Props for {@link OnboardingStep}. */
+/** Previous onboarding route for each step after Welcome. */
+const PREVIOUS_ROUTES = {
+  2: '/(onboarding)',
+  3: '/(onboarding)/profile',
+  4: '/(onboarding)/emergency-contact',
+  5: '/(onboarding)/notifications',
+  6: '/(onboarding)/location-privacy',
+  7: '/(onboarding)/offline',
+} as const;
+
+/** Props for OnboardingStep. */
 export interface OnboardingStepProps {
   /** 1-based step number. */
   step: number;
@@ -20,9 +30,10 @@ export interface OnboardingStepProps {
   primaryLabel: string;
   onPrimary: () => void;
   primaryLoading?: boolean;
+  primaryDisabled?: boolean;
 }
 
-/** The frame of every onboarding screen: header, "N of 7" progress bar, content and navigation actions. */
+/** Shared onboarding frame with progress and navigation controls. */
 export function OnboardingStep({
   step,
   title,
@@ -31,14 +42,31 @@ export function OnboardingStep({
   primaryLabel,
   onPrimary,
   primaryLoading,
+  primaryDisabled,
 }: OnboardingStepProps) {
   const progress = `${step} of ${ONBOARDING_STEP_COUNT}`;
 
   const handleBack = () => {
     if (router.canGoBack()) {
       router.back();
+      return;
+    }
+
+    const previousRoute = PREVIOUS_ROUTES[step as keyof typeof PREVIOUS_ROUTES];
+
+    if (previousRoute) {
+      router.replace(previousRoute);
     }
   };
+
+  const continueButton = (
+    <Button
+      label={primaryLabel}
+      onPress={onPrimary}
+      loading={primaryLoading}
+      disabled={primaryDisabled}
+    />
+  );
 
   return (
     <Screen scroll>
@@ -48,12 +76,24 @@ export function OnboardingStep({
         accessible
         accessibilityRole="progressbar"
         accessibilityLabel={`Step ${progress}`}
-        accessibilityValue={{ min: 1, max: ONBOARDING_STEP_COUNT, now: step }}
+        accessibilityValue={{
+          min: 1,
+          max: ONBOARDING_STEP_COUNT,
+          now: step,
+        }}
         style={styles.progressRow}
       >
         <View style={styles.track}>
-          <View style={[styles.fill, { width: `${(step / ONBOARDING_STEP_COUNT) * 100}%` }]} />
+          <View
+            style={[
+              styles.fill,
+              {
+                width: `${(step / ONBOARDING_STEP_COUNT) * 100}%`,
+              },
+            ]}
+          />
         </View>
+
         <Text variant="caption" color="textMuted">
           {progress}
         </Text>
@@ -73,12 +113,10 @@ export function OnboardingStep({
             />
           </View>
 
-          <View style={styles.continueButton}>
-            <Button label={primaryLabel} onPress={onPrimary} loading={primaryLoading} />
-          </View>
+          <View style={styles.continueButton}>{continueButton}</View>
         </View>
       ) : (
-        <Button label={primaryLabel} onPress={onPrimary} loading={primaryLoading} />
+        continueButton
       )}
     </Screen>
   );
@@ -110,6 +148,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   continueButton: {
-    flex: 2,
+    flex: 1,
   },
 });
