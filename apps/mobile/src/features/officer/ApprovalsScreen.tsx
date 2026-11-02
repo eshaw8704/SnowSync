@@ -16,6 +16,7 @@ import { selectHasPermission, useAuthStore } from '../../state/authStore';
 import { spacing } from '../../theme';
 import { fieldErrors } from '../forms/fieldErrors';
 import { decideMembership, fetchPendingMemberships } from './approvalsApi';
+import { ClubCodeCard } from './ClubCodeCard';
 
 type LoadState =
   { kind: 'loading' } | { kind: 'failed' } | { kind: 'loaded'; items: PendingMembershipItem[] };
@@ -174,6 +175,7 @@ export function ApprovalsScreen() {
         </Card>
       ) : null}
       {body}
+      <ClubCodeCard />
       <Dialog
         visible={pending?.kind === 'approve'}
         title={`Approve ${pending?.item.displayName ?? ''}?`}

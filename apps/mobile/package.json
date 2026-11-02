@@ -16,6 +16,7 @@
     "@expo/vector-icons": "^15.0.2",
     "@snowsync/shared": "*",
     "expo": "~57.0.28",
+    "expo-clipboard": "~57.0.2",
     "expo-constants": "~57.0.21",
     "expo-font": "~57.0.4",
     "expo-linking": "~57.0.12",

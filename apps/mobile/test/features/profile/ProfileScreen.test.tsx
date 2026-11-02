@@ -6,6 +6,9 @@ import { ProfileScreen } from '../../../src/features/profile/ProfileScreen';
 import { resetAuthStore, useAuthStore } from '../../../src/state/authStore';
 
 jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
+jest.mock('expo-clipboard', () => ({
+  setStringAsync: jest.fn(),
+}));
 jest.mock('../../../src/features/auth/sessionManager', () => ({
   signOut: jest.fn(() => Promise.resolve()),
 }));
@@ -49,6 +52,24 @@ describe('ProfileScreen', () => {
     render(<ProfileScreen />);
     fireEvent.press(screen.getByRole('button', { name: 'Role permissions' }));
     expect(router.push).toHaveBeenCalledWith('/officer/permissions');
+  });
+
+  it('lets officers generate club codes without REVIEW_MEMBERSHIPS', () => {
+    signInAs('OFFICER', ['CREATE_CLUB_CODES']);
+    render(<ProfileScreen />);
+
+    expect(screen.getByText('One-time club code')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Generate club code' })).toBeTruthy();
+
+    expect(screen.queryByRole('button', { name: 'Membership approvals' })).toBeNull();
+  });
+
+  it('hides club code generation without CREATE_CLUB_CODES', () => {
+    signInAs('OFFICER', ['REVIEW_MEMBERSHIPS']);
+    render(<ProfileScreen />);
+
+    expect(screen.queryByText('One-time club code')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Membership approvals' })).toBeTruthy();
   });
 
   it('confirms before signing out', () => {
