@@ -5,11 +5,14 @@ import { isUniqueViolation } from '../../lib/prismaErrors';
 import { generateReadableCode, hashToken } from '../../lib/secureTokens';
 
 /**
- * Creates a one-time club code valid for 7 days. Only its hash is stored, so the plain code is
- * returned once, here, for the officer to share in person.
+ * Creates a one-time club code with a configurable expiration (7 days by default).
+ * Only its hash is stored, so the plain code is returned once.
  */
-export async function createClubCode(actorId: string): Promise<ClubCodeResponse> {
-  const expiresAt = new Date(Date.now() + CLUB_CODE_TTL_DAYS * 24 * 60 * 60 * 1000);
+export async function createClubCode(
+  actorId: string,
+  expiresInDays = CLUB_CODE_TTL_DAYS,
+): Promise<ClubCodeResponse> {
+  const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000);
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const code = generateReadableCode(8);
     try {

@@ -9,6 +9,7 @@ import { Text } from '../../components/Text';
 import { selectHasPermission, selectIsExecutive, useAuthStore } from '../../state/authStore';
 import { signOut } from '../auth/sessionManager';
 import { ServerStatusCard } from '../devStatus/ServerStatusCard';
+import { ClubCodeCard } from '../officer/ClubCodeCard';
 
 const MEMBERSHIP_LABELS: Record<MembershipStatus, string> = {
   PENDING_APPROVAL: 'Pending approval',
@@ -69,6 +70,7 @@ export function ProfileScreen() {
           ) : null}
         </Card>
       ) : null}
+      <ClubCodeCard />
       <Card>
         <Text variant="label" color="textMuted">
           ACCOUNT
