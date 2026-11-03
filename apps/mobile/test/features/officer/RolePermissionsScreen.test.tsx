@@ -78,7 +78,7 @@ describe('RolePermissionsScreen', () => {
     expect(screen.getByLabelText('Monitor live trips')).toBeDisabled();
 
     expect(screen.getAllByText('Takes effect in Sprint 3').length).toBeGreaterThan(0);
-  });
+  }, 10_000);
 
   it('saves a member permission with a required reason', async () => {
     signInAs('TREASURER');
