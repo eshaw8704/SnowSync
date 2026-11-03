@@ -11,4 +11,5 @@ export * from './domain/membershipStatus';
 export * from './domain/participationState';
 export * from './domain/permission';
 export * from './domain/tripState';
+export * from './domain/tripStateMachine';
 export * from './domain/userRole';
