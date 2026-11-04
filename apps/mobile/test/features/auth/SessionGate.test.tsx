@@ -46,6 +46,7 @@ const routes = {
   '(tabs)/index': label('Home screen'),
   'officer/_layout': GroupStack,
   'officer/approvals': label('Approvals screen'),
+  'trip/_layout': GroupStack,
 };
 
 describe('SessionGate', () => {

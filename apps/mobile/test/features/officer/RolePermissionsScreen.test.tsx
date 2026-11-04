@@ -77,7 +77,9 @@ describe('RolePermissionsScreen', () => {
     expect(await screen.findByText('Always on for safety')).toBeTruthy();
     expect(screen.getByLabelText('Monitor live trips')).toBeDisabled();
 
-    expect(screen.getAllByText('Takes effect in Sprint 3').length).toBeGreaterThan(0);
+    // Sprint 3 enforces Manage trips, so only later permissions still carry a note.
+    expect(screen.queryByText('Takes effect in Sprint 3')).toBeNull();
+    expect(screen.getAllByText('Takes effect in Sprint 4').length).toBeGreaterThan(0);
   }, 10_000);
 
   it('saves a member permission with a required reason', async () => {

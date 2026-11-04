@@ -27,6 +27,7 @@ export function SessionGate() {
       <Stack.Protected guard={route === 'app'}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="officer" />
+        <Stack.Screen name="trip" />
       </Stack.Protected>
     </Stack>
   );

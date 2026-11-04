@@ -24,7 +24,7 @@ import { selectIsExecutive, useAuthStore } from '../../state/authStore';
 import { colors, radii, sizes, spacing } from '../../theme';
 import { fetchRolePermissions, updateRolePermissions } from './rolePermissionsApi';
 
-const CURRENT_SPRINT = 2;
+const CURRENT_SPRINT = 3;
 const MAX_REASON_LENGTH = 500;
 
 type LoadState =
