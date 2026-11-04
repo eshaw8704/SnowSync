@@ -6,6 +6,7 @@ export * from './api/me';
 export * from './api/membership';
 export * from './api/profile';
 export * from './api/rolePermissions';
+export * from './api/trips';
 export * from './domain/connectionStatus';
 export * from './domain/membershipStatus';
 export * from './domain/participationState';
