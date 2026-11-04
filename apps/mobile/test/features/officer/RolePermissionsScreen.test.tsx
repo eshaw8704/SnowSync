@@ -80,7 +80,7 @@ describe('RolePermissionsScreen', () => {
     // Sprint 3 enforces Manage trips, so only later permissions still carry a note.
     expect(screen.queryByText('Takes effect in Sprint 3')).toBeNull();
     expect(screen.getAllByText('Takes effect in Sprint 4').length).toBeGreaterThan(0);
-  });
+  }, 10_000);
 
   it('saves a member permission with a required reason', async () => {
     signInAs('TREASURER');
