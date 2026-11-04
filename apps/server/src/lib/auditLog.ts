@@ -1,19 +1,22 @@
 import type { Prisma } from '../generated/prisma/client';
 import { prisma } from '../db/prisma';
 
-/** Audit actions used in Sprint 2. Later sprints add more. */
+/** Audit actions used so far. Later sprints add more. */
 export type AuditAction =
   | 'MEMBERSHIP_APPROVED'
   | 'MEMBERSHIP_REJECTED'
   | 'MEMBERSHIP_APPROVED_BY_CLUB_CODE'
   | 'CLUB_CODE_CREATED'
-  | 'ROLE_PERMISSIONS_UPDATED';
+  | 'ROLE_PERMISSIONS_UPDATED'
+  | 'TRIP_CREATED'
+  | 'TRIP_UPDATED'
+  | 'TRIP_DELETED';
 
 /** One audit entry. `before` and `after` are JSON snapshots of what changed. */
 export interface AuditEntry {
   actorId: string;
   action: AuditAction;
-  targetType: 'USER' | 'CLUB_CODE' | 'ROLE';
+  targetType: 'USER' | 'CLUB_CODE' | 'ROLE' | 'TRIP';
   targetId: string;
   reason?: string | null;
   before?: Prisma.InputJsonValue;

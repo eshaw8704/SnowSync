@@ -32,6 +32,41 @@ enum MembershipStatus {
   @@map("membership_status")
 }
 
+/// Trip lifecycle (System Map §05). Must match TripState in @snowsync/shared.
+enum TripState {
+  CREATED
+  OPEN_FOR_REGISTRATION
+  CHECK_IN
+  ACTIVE
+  EXIT
+  COMPLETED
+  CANCELLED
+
+  @@map("trip_state")
+}
+
+/// One member's participation in one trip. Must match ParticipationState in @snowsync/shared.
+enum ParticipationState {
+  NOT_REGISTERED
+  REGISTERED
+  CHECKED_IN
+  ACTIVE
+  CHECKED_OUT
+  NO_SHOW
+  LEFT_EARLY
+
+  @@map("participation_state")
+}
+
+/// Who caused a trip transition: an officer, the Scheduler, or a business rule.
+enum TransitionActorType {
+  USER
+  SCHEDULER
+  RULE
+
+  @@map("transition_actor_type")
+}
+
 /// Activity a member prefers. Must match PREFERRED_ACTIVITIES in @snowsync/shared.
 enum PreferredActivity {
   SKIING
@@ -68,6 +103,9 @@ model User {
   clubCodesCreated        ClubCode[]               @relation("ClubCodeCreatedBy")
   clubCodesUsed           ClubCode[]               @relation("ClubCodeUsedBy")
   auditLogs               AuditLog[]
+  tripsCreated            Trip[]                   @relation("TripCreatedBy")
+  tripMemberships         TripMembership[]         @relation("TripMembershipUser")
+  tripRegistrationsAdded  TripMembership[]         @relation("TripMembershipRegisteredBy")
 
   @@index([membershipStatus])
   @@map("users")
@@ -177,4 +215,88 @@ model AuditLog {
   @@index([targetType, targetId])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+/// One club trip. All times are UTC instants; resortTimeZone is used only for display.
+model Trip {
+  id                   String    @id @default(uuid()) @db.Uuid
+  name                 String
+  description          String    @default("")
+  resortName           String    @map("resort_name")
+  resortTimeZone       String    @map("resort_time_zone")
+  startsAt             DateTime  @map("starts_at") @db.Timestamptz(3)
+  endsAt               DateTime  @map("ends_at") @db.Timestamptz(3)
+  capacity             Int
+  costCents            Int       @map("cost_cents")
+  state                TripState @default(CREATED)
+  /// Starts at 1; every edit and every transition adds 1. Edits must send the version they loaded.
+  version              Int       @default(1)
+  registrationOpensAt  DateTime  @map("registration_opens_at") @db.Timestamptz(3)
+  registrationClosesAt DateTime  @map("registration_closes_at") @db.Timestamptz(3)
+  checkInStartsAt      DateTime  @map("check_in_starts_at") @db.Timestamptz(3)
+  sessionStartsAt      DateTime  @map("session_starts_at") @db.Timestamptz(3)
+  exitStartsAt         DateTime  @map("exit_starts_at") @db.Timestamptz(3)
+  createdById          String    @map("created_by_id") @db.Uuid
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  createdBy   User             @relation("TripCreatedBy", fields: [createdById], references: [id])
+  geofence    TripGeofence?
+  transitions TripTransition[]
+  memberships TripMembership[]
+
+  @@index([state])
+  @@index([startsAt])
+  @@map("trips")
+}
+
+/// The circle around the base lodge that automatic check-in uses (Sprint 6).
+model TripGeofence {
+  id           String @id @default(uuid()) @db.Uuid
+  tripId       String @unique @map("trip_id") @db.Uuid
+  latitude     Float
+  longitude    Float
+  radiusMeters Int    @map("radius_meters")
+  label        String
+
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@map("trip_geofences")
+}
+
+/// Every trip state change: who or what caused it, why, and the opId that makes it idempotent.
+model TripTransition {
+  id        String              @id @default(uuid()) @db.Uuid
+  tripId    String              @map("trip_id") @db.Uuid
+  fromState TripState           @map("from_state")
+  toState   TripState           @map("to_state")
+  actorType TransitionActorType @map("actor_type")
+  actorId   String?             @map("actor_id") @db.Uuid
+  reason    String?
+  opId      String              @unique @map("op_id")
+  createdAt DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tripId])
+  @@map("trip_transitions")
+}
+
+/// One member's participation in one trip. Independent of the trip's own state.
+model TripMembership {
+  id             String             @id @default(uuid()) @db.Uuid
+  tripId         String             @map("trip_id") @db.Uuid
+  userId         String             @map("user_id") @db.Uuid
+  participation  ParticipationState @default(REGISTERED)
+  registeredAt   DateTime           @default(now()) @map("registered_at") @db.Timestamptz(3)
+  registeredById String?            @map("registered_by_id") @db.Uuid
+  version        Int                @default(1)
+
+  trip         Trip  @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  user         User  @relation("TripMembershipUser", fields: [userId], references: [id], onDelete: Cascade)
+  registeredBy User? @relation("TripMembershipRegisteredBy", fields: [registeredById], references: [id])
+
+  @@unique([tripId, userId])
+  @@index([userId])
+  @@map("trip_memberships")
 }
