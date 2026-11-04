@@ -35,4 +35,14 @@ describe('parseEnv', () => {
     expect(config.PASSWORD_RESET_URL).toBe('snowsync://reset-password');
     expect(() => parseEnv({ ...valid, JWT_ACCESS_SECRET: 'short' })).toThrow(/JWT_ACCESS_SECRET/);
   });
+
+  it('runs the trip Scheduler every 30 seconds unless configured', () => {
+    expect(parseEnv(valid).SCHEDULER_INTERVAL_SECONDS).toBe(30);
+    expect(
+      parseEnv({ ...valid, SCHEDULER_INTERVAL_SECONDS: '10' }).SCHEDULER_INTERVAL_SECONDS,
+    ).toBe(10);
+    expect(() => parseEnv({ ...valid, SCHEDULER_INTERVAL_SECONDS: '1' })).toThrow(
+      /SCHEDULER_INTERVAL_SECONDS/,
+    );
+  });
 });

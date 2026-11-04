@@ -17,6 +17,8 @@ const envSchema = z.object({
   PASSWORD_RESET_URL: z.url().default('snowsync://reset-password'),
   /** Sender shown on SnowSync emails. Amazon SES replaces the console sender in Sprint 4. */
   EMAIL_FROM: z.string().min(3).default('SnowSync <no-reply@snowsync.local>'),
+  /** How often the trip lifecycle Scheduler looks for due transitions (System Map §05). */
+  SCHEDULER_INTERVAL_SECONDS: z.coerce.number().int().min(5).default(30),
 });
 
 /** Validated, typed server configuration. */
