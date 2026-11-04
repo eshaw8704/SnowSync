@@ -29,6 +29,14 @@ export const colors = {
   emergency: '#C42D36',
   /** Late, stale or warning information. */
   late: '#8E5C0B',
+  /** Pale green behind green status badges (Registration open, Active). */
+  brandGreenSoft: '#E6F2EC',
+  /** Pale blue behind blue status badges (Check-in, Registered, Checked in). */
+  locationSoft: '#E7F1F7',
+  /** Pale amber behind the late-arrival badge. Late is never red. */
+  lateSoft: '#FBF1DF',
+  /** Pale red behind red status badges (Cancelled, No-show). Always paired with the word. */
+  emergencySoft: '#FBE9EA',
   /** Warm panel behind error states. */
   warningPanel: '#FFF7F2',
   /** Border of the warm error panel. */
