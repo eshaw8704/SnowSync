@@ -61,7 +61,8 @@ export async function updateTrip(
       },
     });
     if (updated.count === 0) {
-      const current = await tx.trip.findUniqueOrThrow({ where: { id: tripId } });
+      const current = await tx.trip.findUnique({ where: { id: tripId } });
+      if (!current) throw notFound();
       if (!EDITABLE.includes(current.state)) throw notEditable();
       throw new HttpError(
         'CONFLICT',
