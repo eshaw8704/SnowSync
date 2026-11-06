@@ -1,6 +1,6 @@
 import type { TripListScope, TripSummary } from '@snowsync/shared';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { ApiClientError } from '../../api/apiClient';
 import { Button } from '../../components/Button';
@@ -26,10 +26,8 @@ const SCOPE_LABELS: Record<TripListScope, string> = {
   created: 'Created',
 };
 
-/**
- * The Trips tab (SS-41, Figma catalog 08): Available, My trips and Past, plus Created and a
- * "Create trip" button for officers with MANAGE_TRIPS. Every group has loading, empty and error states.
- */
+//The Trips tab (SS-41, Figma catalog 08): Available, My trips and Past, plus Created and a
+//"Create trip" button for officers with MANAGE_TRIPS. Every group has loading, empty and error states.
 export function TripsScreen() {
   const isOfficer = useAuthStore(selectHasPermission('MANAGE_TRIPS'));
   const scopes: TripListScope[] = isOfficer
@@ -38,16 +36,25 @@ export function TripsScreen() {
   const [scope, setScope] = useState<TripListScope>('available');
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
 
+  //Only the newest request may update the screen, so a slow earlier response cannot overwrite the
+  //group that is selected now.
+  const latestRequest = useRef(0);
+
   const load = useCallback((next: TripListScope) => {
+    const requestId = ++latestRequest.current;
     listTrips(next).then(
-      (trips) => setState({ kind: 'loaded', trips }),
-      (error: unknown) =>
+      (trips) => {
+        if (requestId === latestRequest.current) setState({ kind: 'loaded', trips });
+      },
+      (error: unknown) => {
+        if (requestId !== latestRequest.current) return;
         setState({
           kind: 'failed',
           offline:
             error instanceof ApiClientError &&
             (error.code === 'NETWORK_ERROR' || error.code === 'TIMEOUT'),
-        }),
+        });
+      },
     );
   }, []);
 

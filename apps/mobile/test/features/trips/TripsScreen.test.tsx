@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import type { TripSummary } from '@snowsync/shared';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { router } from 'expo-router';
 import { ApiClientError } from '../../../src/api/apiClient';
 import { TripsScreen } from '../../../src/features/trips/TripsScreen';
@@ -71,5 +72,31 @@ describe('TripsScreen', () => {
     render(<TripsScreen />);
     fireEvent.press(await screen.findByRole('button', { name: 'Try again' }));
     expect(await screen.findByText('Heavenly club day')).toBeTruthy();
+  });
+
+  it('ignores an outdated response when the group changes quickly', async () => {
+    signInAs();
+    jest.mocked(listTrips).mockReset();
+    let resolveAvailable: (trips: TripSummary[]) => void = () => {};
+    jest
+      .mocked(listTrips)
+      .mockImplementationOnce(
+        () =>
+          new Promise<TripSummary[]>((resolve) => {
+            resolveAvailable = resolve;
+          }),
+      )
+      .mockResolvedValueOnce([]);
+    render(<TripsScreen />);
+    fireEvent.press(await screen.findByRole('tab', { name: 'My trips' }));
+    expect(await screen.findByText('No registrations yet')).toBeTruthy();
+
+    // The slow "Available" request answers last: it must not replace the "My trips" list.
+    await act(async () => {
+      resolveAvailable([HEAVENLY]);
+    });
+
+    expect(screen.queryByText('Heavenly club day')).toBeNull();
+    expect(screen.getByText('No registrations yet')).toBeTruthy();
   });
 });
