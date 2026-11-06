@@ -6,6 +6,13 @@ import TabLayout from '../app/(tabs)/_layout';
 import ProfileScreen from '../app/(tabs)/profile';
 import TripsScreen from '../app/(tabs)/trips';
 
+//Home and Trips load trips from the server; this smoke test only checks the tab bar, so the
+//requests never answer.
+jest.mock('../src/features/trips/tripsApi', () => ({
+  listTrips: jest.fn(() => new Promise(() => {})),
+  getTrip: jest.fn(() => new Promise(() => {})),
+}));
+
 describe('tab layout', () => {
   it('renders the four member tabs with accessible labels', async () => {
     renderRouter(
