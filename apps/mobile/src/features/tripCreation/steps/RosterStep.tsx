@@ -13,39 +13,75 @@ import type { StepProps } from './stepProps';
 export const SEARCH_DEBOUNCE_MS = 300;
 
 /**
- * Step 5 · Initial roster (Figma catalog 09): search approved members (SS-130) and add or remove
- * them. Roster members are saved as REGISTERED when the trip is created.
+ * Step 5 · Initial roster (Figma catalog 09): search approved members (SS-130)
+ * and add or remove them.
+ *
+ * Roster members are saved as REGISTERED when the trip is created.
  */
 export function RosterStep({ value, onChange }: StepProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<MemberSearchResult[]>([]);
+  const [resultsQuery, setResultsQuery] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+
     const timer = setTimeout(() => {
       searchMembers(query).then(
         (members) => {
           if (!cancelled) {
             setResults(members);
+            setResultsQuery(query);
             setFailed(false);
           }
         },
         () => {
-          if (!cancelled) setFailed(true);
+          if (!cancelled) {
+            setResults([]);
+            setResultsQuery(null);
+            setFailed(true);
+          }
         },
       );
     }, SEARCH_DEBOUNCE_MS);
+
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
   }, [query]);
 
+  const handleQueryChange = (nextQuery: string) => {
+    setQuery(nextQuery);
+
+    // Immediately remove results and errors from the previous query.
+    setResults([]);
+    setResultsQuery(null);
+    setFailed(false);
+  };
+
   const added = new Set(value.roster.map((member) => member.id));
-  const add = (member: MemberSearchResult) => onChange({ roster: [...value.roster, member] });
-  const remove = (id: string) =>
-    onChange({ roster: value.roster.filter((member) => member.id !== id) });
+
+  // Only results belonging to the current search may be displayed.
+  const visibleResults = resultsQuery === query ? results : [];
+
+  const add = (member: MemberSearchResult) => {
+    // Prevent adding a member from an outdated search.
+    if (resultsQuery !== query || added.has(member.id)) {
+      return;
+    }
+
+    onChange({
+      roster: [...value.roster, member],
+    });
+  };
+
+  const remove = (id: string) => {
+    onChange({
+      roster: value.roster.filter((member) => member.id !== id),
+    });
+  };
 
   return (
     <View style={{ gap: spacing.md }}>
@@ -59,6 +95,7 @@ export function RosterStep({ value, onChange }: StepProps) {
                   {ROLE_LABELS[member.role]} · REGISTERED
                 </Text>
               </View>
+
               <View style={styles.action}>
                 <Button
                   label="Remove"
@@ -71,21 +108,24 @@ export function RosterStep({ value, onChange }: StepProps) {
           ))}
         </Card>
       ) : null}
+
       <TextField
         label="Add from club directory"
         value={query}
-        onChangeText={setQuery}
+        onChangeText={handleQueryChange}
         placeholder="Search name or email"
         autoCapitalize="none"
         helperText="Only approved club members; no user-created groups."
         testID="roster-search"
       />
+
       {failed ? (
         <Text color="emergency">
           Could not search members. Check your connection and try again.
         </Text>
       ) : null}
-      {results
+
+      {visibleResults
         .filter((member) => !added.has(member.id))
         .map((member) => (
           <View key={member.id} style={styles.row}>
@@ -95,6 +135,7 @@ export function RosterStep({ value, onChange }: StepProps) {
                 {member.email}
               </Text>
             </View>
+
             <View style={styles.action}>
               <Button
                 label="Add"
@@ -105,6 +146,7 @@ export function RosterStep({ value, onChange }: StepProps) {
             </View>
           </View>
         ))}
+
       <Card>
         <Text variant="caption" color="textMuted">
           Roster members are pre-added as REGISTERED. Participation is tracked independently per
@@ -116,7 +158,17 @@ export function RosterStep({ value, onChange }: StepProps) {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xs },
-  who: { flex: 1, gap: 2 },
-  action: { width: 120 },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  who: {
+    flex: 1,
+    gap: 2,
+  },
+  action: {
+    width: 120,
+  },
 });

@@ -1,3 +1,4 @@
+import { findResort } from '@snowsync/shared';
 import { View } from 'react-native';
 import { DateTimeField } from '../../../components/DateTimeField';
 import { Text } from '../../../components/Text';
@@ -6,16 +7,21 @@ import { spacing } from '../../../theme';
 import type { StepProps } from './stepProps';
 
 /**
- * Step 3 · Registration settings (Figma catalog 09): when registration opens, the deadline,
- * capacity and cost per member. Errors show on the field that caused them.
+ * Step 3 · Registration settings: registration dates,
+ * capacity, and cost per member.
  */
 export function RegistrationStep({ value, onChange, errors }: StepProps) {
+  const timeZone =
+    (value.resortName ? findResort(value.resortName)?.timeZone : undefined) ??
+    'America/Los_Angeles';
+
   return (
     <View style={{ gap: spacing.md }}>
       <DateTimeField
         label="Registration opens"
         mode="datetime"
         value={value.registrationOpensAt}
+        timeZone={timeZone}
         error={errors.registrationOpensAt}
         onChange={(registrationOpensAt) => onChange({ registrationOpensAt })}
         testID="registration-opens"
@@ -24,6 +30,7 @@ export function RegistrationStep({ value, onChange, errors }: StepProps) {
         label="Registration deadline"
         mode="datetime"
         value={value.registrationClosesAt}
+        timeZone={timeZone}
         error={errors.registrationClosesAt}
         onChange={(registrationClosesAt) => onChange({ registrationClosesAt })}
         testID="registration-closes"

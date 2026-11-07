@@ -19,6 +19,8 @@ export interface DateTimeFieldProps {
   error?: string;
   /** Used for the first picker when nothing is chosen yet. Defaults to now. */
   defaultValue?: Date;
+  /** IANA time zone used for displaying and selecting trip times. */
+  timeZone?: string;
   testID?: string;
 }
 
@@ -28,17 +30,27 @@ const DISPLAY: Record<DateTimeFieldMode, Intl.DateTimeFormatOptions> = {
   datetime: { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' },
 };
 
-/** Shows `iso` the way the field displays it, in the phone's time zone. */
-export function formatFieldValue(iso: string, mode: DateTimeFieldMode): string {
-  return new Intl.DateTimeFormat('en-US', DISPLAY[mode])
+/** Formats a stored UTC instant in the specified time zone. */
+export function formatFieldValue(
+  iso: string,
+  mode: DateTimeFieldMode,
+  timeZone = 'America/Los_Angeles',
+): string {
+  return new Intl.DateTimeFormat('en-US', {
+    ...DISPLAY[mode],
+    timeZone,
+  })
     .format(new Date(iso))
-    .replace(/[  ]/g, ' ');
+    .replace(/[\u202f\u00a0]/g, ' ');
 }
 
 /**
- * A labelled field that opens the native date or time picker (@react-native-community/datetimepicker).
- * On Android the picker is a dialog; on iOS a spinner appears under the field with a Done button.
- * Times are picked and shown in the phone's time zone and stored as UTC ISO strings.
+ * A labelled field that opens the native date or time picker.
+ * On Android the picker is a dialog; on iOS a spinner appears
+ * under the field with a Done button.
+ *
+ * Times are displayed and selected in the specified resort
+ * time zone and stored as UTC ISO strings.
  */
 export function DateTimeField({
   label,
@@ -47,15 +59,18 @@ export function DateTimeField({
   onChange,
   error,
   defaultValue,
+  timeZone = 'America/Los_Angeles',
   testID,
 }: DateTimeFieldProps) {
   const [picking, setPicking] = useState<'date' | 'time' | null>(null);
+
   const current = value ? new Date(value) : (defaultValue ?? new Date());
-  const display = value ? formatFieldValue(value, mode) : 'Not set';
+  const display = value ? formatFieldValue(value, mode, timeZone) : 'Not set';
   const icon = mode === 'time' ? 'clock-outline' : 'calendar-month-outline';
 
   const choose = (date: Date) => {
     onChange(date.toISOString());
+
     if (Platform.OS === 'android') {
       setPicking(mode === 'datetime' && picking === 'date' ? 'time' : null);
     }
@@ -64,6 +79,7 @@ export function DateTimeField({
   return (
     <View style={styles.container}>
       <Text variant="label">{label}</Text>
+
       <Pressable
         testID={testID}
         accessibilityRole="button"
@@ -73,13 +89,16 @@ export function DateTimeField({
         style={[styles.field, { borderColor: error ? colors.emergency : colors.border }]}
       >
         <Text color={value ? 'textPrimary' : 'textMuted'}>{display}</Text>
+
         <MaterialCommunityIcons name={icon} size={20} color={colors.textMuted} />
       </Pressable>
+
       {error ? (
         <Text variant="caption" color="emergency" accessibilityLiveRegion="polite">
           {error}
         </Text>
       ) : null}
+
       {picking ? (
         <>
           <DateTimePicker
@@ -88,9 +107,19 @@ export function DateTimeField({
             value={current}
             mode={Platform.OS === 'ios' && mode === 'datetime' ? 'datetime' : picking}
             display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-            onValueChange={(_event, date) => choose(date)}
-            onDismiss={() => setPicking(null)}
+            timeZoneName={timeZone}
+            onChange={(event, date) => {
+              if (event.type === 'dismissed') {
+                setPicking(null);
+                return;
+              }
+
+              if (date) {
+                choose(date);
+              }
+            }}
           />
+
           {Platform.OS === 'ios' ? (
             <Button label="Done" variant="secondary" onPress={() => setPicking(null)} />
           ) : null}
