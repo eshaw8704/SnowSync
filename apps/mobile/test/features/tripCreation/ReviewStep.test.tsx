@@ -22,7 +22,12 @@ const maya = {
 describe('ReviewStep', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    useTripWizardStore.setState({ draft: { ...VALID_DRAFT, roster: [maya] }, step: 6, errors: {} });
+    useTripWizardStore.setState({
+      draft: { ...VALID_DRAFT, roster: [maya] },
+      step: 6,
+      errors: {},
+      creating: false,
+    });
   });
 
   it('summarizes every step with an Edit link back to it', () => {
@@ -115,5 +120,47 @@ describe('ReviewStep', () => {
     expect(router.replace).toHaveBeenCalledWith('/trips');
     expect(createTrip).toHaveBeenCalledTimes(1);
     expect(useTripWizardStore.getState().draft.name).toBe('Sugar Bowl club day');
+  });
+
+  it('shows the description, and both dates when the trip ends on a later day', () => {
+    const [sameDay] = reviewRows(VALID_DRAFT);
+    expect(sameDay!.detail).toBe('A full day on snow with the Sac State crew.');
+    expect(sameDay!.value).toMatch(/^[^–]+ · .+–.+$/);
+    const [overnight] = reviewRows({
+      ...VALID_DRAFT,
+      description: '   ',
+      endsAt: '2027-02-08T00:00:00.000Z',
+    });
+    expect(overnight!.detail).toBeUndefined();
+    expect(overnight!.value.split(' – ')).toHaveLength(2);
+    expect(overnight!.value).not.toContain(' · ');
+  });
+
+  it('explains a draft the schema rejects instead of calling it a network failure', async () => {
+    const roster = Array.from({ length: 201 }, (_, index) => ({
+      ...maya,
+      id: `11111111-1111-4111-8111-${String(index).padStart(12, '0')}`,
+    }));
+    useTripWizardStore.setState({ draft: { ...VALID_DRAFT, roster } });
+    render(<ReviewStep />);
+    fireEvent.press(screen.getByRole('button', { name: 'Create trip' }));
+    expect(createTrip).not.toHaveBeenCalled();
+    expect(screen.queryByText("Your trip wasn't created")).toBeNull();
+    expect(await screen.findByText(/200/)).toBeTruthy();
+  });
+
+  it('locks the Edit links and ignores a second Create while the trip is being created', async () => {
+    let finish: (value: never) => void = () => undefined;
+    jest.mocked(createTrip).mockReturnValue(new Promise((resolve) => (finish = resolve)));
+    render(<ReviewStep />);
+    fireEvent.press(screen.getByRole('button', { name: 'Create trip' }));
+    await waitFor(() => expect(useTripWizardStore.getState().creating).toBe(true));
+    fireEvent.press(screen.getByRole('button', { name: 'Edit Resort & boundary' }));
+    fireEvent.press(screen.getByRole('button', { name: 'Edit details' }));
+    expect(useTripWizardStore.getState().step).toBe(6);
+    fireEvent.press(screen.getByRole('button', { name: 'Create trip' }));
+    expect(createTrip).toHaveBeenCalledTimes(1);
+    finish({ id: 'trip-9', resortName: 'Sugar Bowl' } as never);
+    await waitFor(() => expect(router.replace).toHaveBeenCalled());
   });
 });

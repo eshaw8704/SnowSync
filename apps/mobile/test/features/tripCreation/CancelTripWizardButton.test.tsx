@@ -8,7 +8,9 @@ import { EMPTY_DRAFT } from '../../../src/features/tripCreation/tripDraft';
 import { useTripWizardStore } from '../../../src/features/tripCreation/tripWizardStore';
 import { VALID_DRAFT } from './fixtures';
 
-jest.mock('expo-router', () => ({ router: { back: jest.fn() } }));
+jest.mock('expo-router', () => ({
+  router: { back: jest.fn(), replace: jest.fn(), canGoBack: jest.fn(() => true) },
+}));
 
 describe('CancelTripWizardButton', () => {
   beforeEach(() => {
@@ -47,5 +49,21 @@ describe('CancelTripWizardButton', () => {
     expect(router.back).toHaveBeenCalledTimes(1);
     expect(useTripWizardStore.getState().draft).toEqual(EMPTY_DRAFT);
     expect(useTripWizardStore.getState().step).toBe(1);
+  });
+
+  it('goes to Trips when there is no history to go back to', () => {
+    jest.mocked(router.canGoBack).mockReturnValueOnce(false);
+    render(<CancelTripWizardButton />);
+    fireEvent.press(screen.getByRole('button', { name: 'Cancel trip creation' }));
+    expect(router.back).not.toHaveBeenCalled();
+    expect(router.replace).toHaveBeenCalledWith('/trips');
+  });
+
+  it('does nothing while the trip is being created', () => {
+    useTripWizardStore.setState({ draft: VALID_DRAFT, creating: true });
+    render(<CancelTripWizardButton />);
+    fireEvent.press(screen.getByRole('button', { name: 'Cancel trip creation' }));
+    expect(screen.queryByText('Discard this trip?')).toBeNull();
+    expect(router.back).not.toHaveBeenCalled();
   });
 });

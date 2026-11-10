@@ -1,8 +1,9 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { findResort } from '@snowsync/shared';
+import { findResort, type CreateTripRequest } from '@snowsync/shared';
 import { router } from 'expo-router';
 import { useState, type ComponentProps } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
+import { ZodError } from 'zod';
 import { ApiClientError } from '../../../api/apiClient';
 import { Card } from '../../../components/Card';
 import { formatFieldValue } from '../../../components/DateTimeField';
@@ -28,6 +29,16 @@ const time = (iso: string | null) => (iso ? formatFieldValue(iso, 'time') : 'not
 
 const dateTime = (iso: string | null) => (iso ? formatFieldValue(iso, 'datetime') : 'not set');
 
+/** "Sat, Feb 6 · 8:00 AM–4:00 PM", or with both dates when the trip ends on a later day. */
+function tripWhen(startsAt: string | null, endsAt: string | null): string {
+  if (!startsAt) return 'Date not set';
+  const startDate = formatFieldValue(startsAt, 'date');
+  const endDate = endsAt ? formatFieldValue(endsAt, 'date') : startDate;
+  return endDate === startDate
+    ? `${startDate} · ${time(startsAt)}–${time(endsAt)}`
+    : `${startDate} ${time(startsAt)} – ${endDate} ${time(endsAt)}`;
+}
+
 /** One summary row per wizard step (Figma catalog 09, step 6), each with the step its Edit link opens. */
 export function reviewRows(
   draft: TripDraft,
@@ -41,9 +52,8 @@ export function reviewRows(
       step: 1,
       icon: 'calendar-month-outline',
       label: draft.name || 'Untitled trip',
-      value: draft.startsAt
-        ? `${formatFieldValue(draft.startsAt, 'date')} · ${time(draft.startsAt)}–${time(draft.endsAt)}`
-        : 'Date not set',
+      value: tripWhen(draft.startsAt, draft.endsAt),
+      detail: draft.description.trim() || undefined,
     },
     {
       step: 2,
@@ -87,18 +97,30 @@ export function reviewRows(
  * re-validates everything, posts the trip, clears the wizard and opens the confirmation.
  */
 export function ReviewStep() {
-  const { draft, goTo, validateAll, reset } = useTripWizardStore();
-  const [creating, setCreating] = useState(false);
+  const { draft, goTo, validateAll, reset, creating, setCreating } = useTripWizardStore();
   const [message, setMessage] = useState<string>();
   const [failure, setFailure] = useState<'network' | 'timeout'>();
 
   const create = async () => {
+    if (useTripWizardStore.getState().creating) return;
     setMessage(undefined);
     setFailure(undefined);
     if (!validateAll()) return;
+    // Built before the request: a draft the shared schema still rejects (for example a roster over
+    // the 200-member limit) is the officer's to fix, not a network failure.
+    let request: CreateTripRequest;
+    try {
+      request = draftToCreateRequest(draft);
+    } catch (error) {
+      setMessage(
+        (error instanceof ZodError ? error.issues[0]?.message : undefined) ??
+          'Check the trip details and try again.',
+      );
+      return;
+    }
     setCreating(true);
     try {
-      const trip = await createTrip(draftToCreateRequest(draft));
+      const trip = await createTrip(request);
       reset();
       router.replace({
         pathname: '/trip/created',
@@ -109,10 +131,12 @@ export function ReviewStep() {
       // don't promise "nothing was saved" or invite a blind retry that could create a duplicate.
       if (error instanceof ApiClientError && error.code === 'TIMEOUT') {
         setFailure('timeout');
-      } else if (error instanceof ApiClientError && error.code !== 'NETWORK_ERROR') {
+      } else if (error instanceof ApiClientError && error.code === 'NETWORK_ERROR') {
+        setFailure('network');
+      } else if (error instanceof ApiClientError) {
         setMessage(error.message);
       } else {
-        setFailure('network');
+        setMessage('Something went wrong creating the trip. Your details are still here.');
       }
     } finally {
       setCreating(false);
@@ -127,14 +151,16 @@ export function ReviewStep() {
       onPrimary={() => void create()}
       primaryLoading={creating}
       secondaryLabel="Edit details"
-      onSecondary={() => goTo(1)}
+      onSecondary={() => {
+        if (!creating) goTo(1);
+      }}
     >
       <TripStateBadge state="CREATED" showPrefix={false} />
       {failure === 'network' ? (
         <ErrorState
           variant="network"
           title="Your trip wasn't created"
-          message="We couldn't reach SnowSync. Nothing was saved; your details are still here."
+          message="We couldn't reach SnowSync, so your trip probably wasn't saved. Your details are still here."
           actionLabel="Try again"
           onAction={() => void create()}
         />
@@ -161,7 +187,7 @@ export function ReviewStep() {
               </Text>
               <Text variant="bodyStrong">{row.value}</Text>
               {row.detail ? (
-                <Text variant="caption" color="textMuted">
+                <Text variant="caption" color="textMuted" numberOfLines={3}>
                   {row.detail}
                 </Text>
               ) : null}
@@ -170,6 +196,8 @@ export function ReviewStep() {
               accessibilityRole="button"
               accessibilityLabel={`Edit ${row.label}`}
               onPress={() => goTo(row.step)}
+              disabled={creating}
+              accessibilityState={{ disabled: creating }}
               style={styles.edit}
             >
               <MaterialCommunityIcons name="pencil-outline" size={20} color={colors.brandGreen} />
