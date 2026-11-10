@@ -26,6 +26,7 @@ describe('ReviewStep', () => {
       draft: { ...VALID_DRAFT, roster: [maya] },
       step: 6,
       errors: {},
+      creating: false,
     });
   });
 
@@ -173,5 +174,16 @@ describe('ReviewStep', () => {
     finish({ id: 'trip-9', resortName: 'Sugar Bowl' } as never);
     await waitFor(() => expect(useTripWizardStore.getState().draft.name).toBe(''));
     expect(router.replace).not.toHaveBeenCalled();
+  });
+
+  it('clears the shared creating flag even when the create fails after the officer left', async () => {
+    let fail: (error: unknown) => void = () => undefined;
+    jest.mocked(createTrip).mockReturnValue(new Promise((_, reject) => (fail = reject)));
+    const { unmount } = render(<ReviewStep />);
+    fireEvent.press(screen.getByRole('button', { name: 'Create trip' }));
+    await waitFor(() => expect(useTripWizardStore.getState().creating).toBe(true));
+    unmount();
+    fail(new ApiClientError({ code: 'NETWORK_ERROR', message: 'offline' }));
+    await waitFor(() => expect(useTripWizardStore.getState().creating).toBe(false));
   });
 });

@@ -97,8 +97,7 @@ export function reviewRows(
  * re-validates everything, posts the trip, clears the wizard and opens the confirmation.
  */
 export function ReviewStep() {
-  const { draft, goTo, validateAll, reset } = useTripWizardStore();
-  const [creating, setCreating] = useState(false);
+  const { draft, goTo, validateAll, reset, creating, setCreating } = useTripWizardStore();
   const [message, setMessage] = useState<string>();
   const [failure, setFailure] = useState<'network' | 'timeout'>();
   // A ref, not just state, so a second tap in the same frame can't send a second POST.
@@ -154,8 +153,10 @@ export function ReviewStep() {
         setMessage('Something went wrong creating the trip. Your details are still here.');
       }
     } finally {
+      // Always, even after the officer left: the flag is shared, and a stuck one would keep the
+      // next wizard's Cancel disabled.
       inFlight.current = false;
-      if (mounted.current) setCreating(false);
+      setCreating(false);
     }
   };
 
