@@ -15,12 +15,10 @@ export function hasDraftChanges(draft: TripDraft): boolean {
 /**
  * The wizard header's "Cancel". /trip/create is the first screen of the trip stack, so the header
  * has no back button of its own. Leaving clears the draft; with anything entered, it asks first.
- * Disabled while the trip is being created, so a discard can't race a save that is already sent.
  */
 export function CancelTripWizardButton() {
   const draft = useTripWizardStore((state) => state.draft);
   const reset = useTripWizardStore((state) => state.reset);
-  const creating = useTripWizardStore((state) => state.creating);
   const [confirming, setConfirming] = useState(false);
 
   const leave = () => {
@@ -37,12 +35,10 @@ export function CancelTripWizardButton() {
         accessibilityRole="button"
         accessibilityLabel="Cancel trip creation"
         onPress={() => (hasDraftChanges(draft) ? setConfirming(true) : leave())}
-        disabled={creating}
-        accessibilityState={{ disabled: creating }}
         hitSlop={8}
         style={{ minHeight: sizes.minTouchTargetIos, justifyContent: 'center' }}
       >
-        <Text variant="label" color={creating ? 'textMuted' : 'brandGreen'}>
+        <Text variant="label" color="brandGreen">
           Cancel
         </Text>
       </Pressable>

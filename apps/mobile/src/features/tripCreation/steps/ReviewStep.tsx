@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { findResort, type CreateTripRequest } from '@snowsync/shared';
 import { router } from 'expo-router';
-import { useState, type ComponentProps } from 'react';
+import { useEffect, useRef, useState, type ComponentProps } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { ZodError } from 'zod';
 import { ApiClientError } from '../../../api/apiClient';
@@ -97,12 +97,23 @@ export function reviewRows(
  * re-validates everything, posts the trip, clears the wizard and opens the confirmation.
  */
 export function ReviewStep() {
-  const { draft, goTo, validateAll, reset, creating, setCreating } = useTripWizardStore();
+  const { draft, goTo, validateAll, reset } = useTripWizardStore();
+  const [creating, setCreating] = useState(false);
   const [message, setMessage] = useState<string>();
   const [failure, setFailure] = useState<'network' | 'timeout'>();
+  // A ref, not just state, so a second tap in the same frame can't send a second POST.
+  const inFlight = useRef(false);
+  // False once the officer has left the wizard (swipe back, Android back, Cancel).
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   const create = async () => {
-    if (useTripWizardStore.getState().creating) return;
+    if (inFlight.current) return;
     setMessage(undefined);
     setFailure(undefined);
     if (!validateAll()) return;
@@ -118,10 +129,14 @@ export function ReviewStep() {
       );
       return;
     }
+    inFlight.current = true;
     setCreating(true);
     try {
       const trip = await createTrip(request);
+      // The trip is saved either way, so the draft must go; but if the officer already left the
+      // wizard, don't pull them back to the confirmation from wherever they went.
       reset();
+      if (!mounted.current) return;
       router.replace({
         pathname: '/trip/created',
         params: { tripId: trip.id, resortName: trip.resortName },
@@ -139,7 +154,8 @@ export function ReviewStep() {
         setMessage('Something went wrong creating the trip. Your details are still here.');
       }
     } finally {
-      setCreating(false);
+      inFlight.current = false;
+      if (mounted.current) setCreating(false);
     }
   };
 

@@ -58,12 +58,4 @@ describe('CancelTripWizardButton', () => {
     expect(router.back).not.toHaveBeenCalled();
     expect(router.replace).toHaveBeenCalledWith('/trips');
   });
-
-  it('does nothing while the trip is being created', () => {
-    useTripWizardStore.setState({ draft: VALID_DRAFT, creating: true });
-    render(<CancelTripWizardButton />);
-    fireEvent.press(screen.getByRole('button', { name: 'Cancel trip creation' }));
-    expect(screen.queryByText('Discard this trip?')).toBeNull();
-    expect(router.back).not.toHaveBeenCalled();
-  });
 });

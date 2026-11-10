@@ -13,9 +13,6 @@ export interface TripWizardState {
   draft: TripDraft;
   step: WizardStep;
   errors: Record<string, string>;
-  /** True while the Review step's POST /trips is in flight: Cancel and the Edit links wait. */
-  creating: boolean;
-  setCreating: (creating: boolean) => void;
   /** Merges fields into the draft and clears their errors. */
   update: (patch: Partial<TripDraft>) => void;
   /** Validates the current step; moves on only when it is valid. Returns whether it moved. */
@@ -42,8 +39,6 @@ export const useTripWizardStore = create<TripWizardState>()((set, get) => ({
   draft: EMPTY_DRAFT,
   step: 1,
   errors: {},
-  creating: false,
-  setCreating: (creating) => set({ creating }),
   update: (patch) =>
     set((state) => {
       const errors = { ...state.errors };
@@ -75,5 +70,5 @@ export const useTripWizardStore = create<TripWizardState>()((set, get) => ({
     }
     return true;
   },
-  reset: () => set({ draft: EMPTY_DRAFT, step: 1, errors: {}, creating: false }),
+  reset: () => set({ draft: EMPTY_DRAFT, step: 1, errors: {} }),
 }));

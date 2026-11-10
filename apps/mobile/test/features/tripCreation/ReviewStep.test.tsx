@@ -26,7 +26,6 @@ describe('ReviewStep', () => {
       draft: { ...VALID_DRAFT, roster: [maya] },
       step: 6,
       errors: {},
-      creating: false,
     });
   });
 
@@ -154,7 +153,7 @@ describe('ReviewStep', () => {
     jest.mocked(createTrip).mockReturnValue(new Promise((resolve) => (finish = resolve)));
     render(<ReviewStep />);
     fireEvent.press(screen.getByRole('button', { name: 'Create trip' }));
-    await waitFor(() => expect(useTripWizardStore.getState().creating).toBe(true));
+    await waitFor(() => expect(createTrip).toHaveBeenCalledTimes(1));
     fireEvent.press(screen.getByRole('button', { name: 'Edit Resort & boundary' }));
     fireEvent.press(screen.getByRole('button', { name: 'Edit details' }));
     expect(useTripWizardStore.getState().step).toBe(6);
@@ -162,5 +161,17 @@ describe('ReviewStep', () => {
     expect(createTrip).toHaveBeenCalledTimes(1);
     finish({ id: 'trip-9', resortName: 'Sugar Bowl' } as never);
     await waitFor(() => expect(router.replace).toHaveBeenCalled());
+  });
+
+  it('clears the draft but stays put when the trip finishes saving after the officer left', async () => {
+    let finish: (value: never) => void = () => undefined;
+    jest.mocked(createTrip).mockReturnValue(new Promise((resolve) => (finish = resolve)));
+    const { unmount } = render(<ReviewStep />);
+    fireEvent.press(screen.getByRole('button', { name: 'Create trip' }));
+    await waitFor(() => expect(createTrip).toHaveBeenCalledTimes(1));
+    unmount();
+    finish({ id: 'trip-9', resortName: 'Sugar Bowl' } as never);
+    await waitFor(() => expect(useTripWizardStore.getState().draft.name).toBe(''));
+    expect(router.replace).not.toHaveBeenCalled();
   });
 });
