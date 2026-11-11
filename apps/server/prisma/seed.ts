@@ -135,6 +135,10 @@ const SAMPLE_TRIPS: SampleTrip[] = [
 async function seedTrips(): Promise<number> {
   const officer = await prisma.user.findUniqueOrThrow({ where: { email: 'officer@example.com' } });
   const now = Date.now();
+  // Old transition rows would block the Scheduler's fixed opIds after a re-seed. WON'T AFFECT USERS IN DEPLOYMENT. ONLY FOR TESTING DURING DEVELOPMENT
+  await prisma.tripTransition.deleteMany({
+    where: { tripId: { in: SAMPLE_TRIPS.map((trip) => trip.id) } },
+  });
   for (const sample of SAMPLE_TRIPS) {
     const resort = RESORTS.find((r) => r.name === sample.resortName)!;
     const startsAt = new Date(now + sample.startsIn);
