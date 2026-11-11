@@ -1,6 +1,6 @@
 import { ROLE_LABELS, type TripDetail } from '@snowsync/shared';
 import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useState, type ReactNode } from 'react';
+import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { ApiClientError } from '../../api/apiClient';
 import { Button } from '../../components/Button';
@@ -38,17 +38,25 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-//Trip detail (SS-148, Figma catalog 08). The trip phase and my own status are shown side by side never merged.
+//Trip detail (SS-148, Figma catalog 08). The trip phase and my own status are shown side by side never merged
 //The Register button arrives in Sprint 4: its place is the marked slot below.
 export function TripDetailScreen() {
   const { tripId } = useLocalSearchParams<{ tripId: string }>();
   const canManage = useAuthStore(selectHasPermission('MANAGE_TRIPS'));
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
 
+  //Only the newest request may update the screen, so a slow earlier response cannot replace a
+  //newer trip or error.
+  const latestRequest = useRef(0);
+
   const load = useCallback(() => {
+    const requestId = ++latestRequest.current;
     getTrip(tripId).then(
-      (trip) => setState({ kind: 'loaded', trip }),
+      (trip) => {
+        if (requestId === latestRequest.current) setState({ kind: 'loaded', trip });
+      },
       (error: unknown) => {
+        if (requestId !== latestRequest.current) return;
         const code = error instanceof ApiClientError ? error.code : null;
         setState({
           kind: 'failed',
@@ -63,7 +71,7 @@ export function TripDetailScreen() {
     );
   }, [tripId]);
 
-  //Reload whenever the screen comes back into view, e.g. after Trip management changed the trip.
+  // Reload whenever the screen comes back into view, e.g. after Trip management changed the trip.
   useFocusEffect(
     useCallback(() => {
       load();
@@ -81,10 +89,25 @@ export function TripDetailScreen() {
     return (
       <Screen>
         {state.reason === 'notFound' ? (
-          <ErrorState variant="notFound" onAction={() => router.back()} />
+          <ErrorState
+            variant="notFound"
+            onAction={() => {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace('/trips');
+              }
+            }}
+          />
         ) : (
           <ErrorState
             variant={state.reason}
+            title="We couldn't load this trip"
+            message={
+              state.reason === 'network'
+                ? 'Check your connection and try again.'
+                : 'Something went wrong. Try again in a moment.'
+            }
             actionLabel="Try again"
             onAction={() => {
               setState({ kind: 'loading' });
@@ -98,6 +121,7 @@ export function TripDetailScreen() {
 
   const { trip } = state;
   const tz = trip.resortTimeZone;
+  const about = trip.description?.trim();
   return (
     <Screen scroll edges={['bottom']}>
       <Stack.Screen options={{ title: trip.name }} />
@@ -110,6 +134,11 @@ export function TripDetailScreen() {
           <ParticipationBadge participation={trip.myParticipation} />
         </View>
       </View>
+      {about ? (
+        <Section title="About">
+          <Text>{about}</Text>
+        </Section>
+      ) : null}
       <Section title="Date and time">
         <Text variant="bodyStrong">{formatTripDateWithYear(trip.startsAt, tz)}</Text>
         <Text color="textMuted">{formatTimeRange(trip.startsAt, trip.endsAt, tz)}</Text>
@@ -144,9 +173,7 @@ export function TripDetailScreen() {
           </Text>
         ))}
       </Section>
-      {
-        //SPRINT 4 SLOT: the Register / Cancel registration button (SS-35) will be implemented here
-      }
+      {/* SPRINT 4 SLOT: the Register / Cancel registration button (SS-35) goes here. */}
       <View testID="register-slot">
         <Text variant="caption" color="textMuted">
           Registration from the app arrives in the next update.
