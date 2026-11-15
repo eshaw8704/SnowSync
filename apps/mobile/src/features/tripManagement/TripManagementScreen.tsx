@@ -21,6 +21,7 @@ import {
   formatTripDate,
 } from '../trips/tripFormat';
 import { getTrip } from '../trips/tripsApi';
+import { DeleteTripControl } from './DeleteTripControl';
 
 /** The configuration can be edited until the trip goes ACTIVE (same rule as the server). */
 export const EDITABLE_STATES: TripState[] = ['CREATED', 'OPEN_FOR_REGISTRATION', 'CHECK_IN'];
@@ -155,6 +156,7 @@ export function TripManagementScreen() {
           This trip is active or over, so its configuration can no longer be edited.
         </Text>
       )}
+      <DeleteTripControl trip={trip} />
     </Screen>
   );
 }
