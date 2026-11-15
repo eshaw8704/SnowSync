@@ -22,6 +22,7 @@ import {
 } from '../trips/tripFormat';
 import { getTrip } from '../trips/tripsApi';
 import { DeleteTripControl } from './DeleteTripControl';
+import { LifecycleActions } from './LifecycleActions';
 
 /** The configuration can be edited until the trip goes ACTIVE (same rule as the server). */
 export const EDITABLE_STATES: TripState[] = ['CREATED', 'OPEN_FOR_REGISTRATION', 'CHECK_IN'];
@@ -50,6 +51,7 @@ export function TripManagementScreen() {
   const { tripId } = useLocalSearchParams<{ tripId: string }>();
   const canManage = useAuthStore(selectHasPermission('MANAGE_TRIPS'));
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
+  const [notice, setNotice] = useState<string>();
 
   const load = useCallback(() => {
     getTrip(tripId).then(
@@ -115,6 +117,10 @@ export function TripManagementScreen() {
 
   const { trip } = state;
   const tz = trip.resortTimeZone;
+  const onChanged = (message?: string) => {
+    setNotice(message);
+    load();
+  };
   return (
     <Screen scroll edges={['bottom']}>
       <View style={styles.header}>
@@ -130,6 +136,11 @@ export function TripManagementScreen() {
           {formatCost(trip.costCents)}
         </Text>
       </View>
+      {notice ? (
+        <Card>
+          <Text color="brandGreen">{notice}</Text>
+        </Card>
+      ) : null}
       <Card>
         <Row
           label="Trip configuration"
@@ -145,6 +156,7 @@ export function TripManagementScreen() {
         />
         <Row label="Roster" value={`${trip.registeredCount} of ${trip.capacity} registered`} />
       </Card>
+      <LifecycleActions trip={trip} onChanged={onChanged} />
       {EDITABLE_STATES.includes(trip.state) ? (
         <Button
           label="Edit configuration"

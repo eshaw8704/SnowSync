@@ -31,6 +31,7 @@ describe('TripManagementScreen', () => {
     render(<TripManagementScreen />);
     expect(await screen.findByText('Heavenly club day')).toBeTruthy();
     expect(screen.getByText('16 of 24 registered')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Start check-in early' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Delete draft trip' })).toBeNull();
     fireEvent.press(screen.getByRole('button', { name: 'Edit configuration' }));
     expect(router.push).toHaveBeenCalledWith('/trip/edit/trip-heavenly');
