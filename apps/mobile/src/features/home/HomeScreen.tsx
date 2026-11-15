@@ -59,6 +59,11 @@ export function HomeScreen() {
       <ErrorState
         variant={state.offline ? 'network' : 'unknown'}
         title="We couldn't load your trips"
+        message={
+          state.offline
+            ? 'Check your connection and try again.'
+            : 'Something went wrong. Try again in a moment.'
+        }
         actionLabel="Try again"
         onAction={() => {
           setState({ kind: 'loading' });
