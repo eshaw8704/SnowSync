@@ -1,14 +1,4 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { HomeScreen } from '../../src/features/home/HomeScreen';
 
-// Home tab placeholder. Real content arrives in a later sprint.
-export default function HomeScreen() {
-  return (
-    <View style={styles.container}>
-      <Text accessibilityRole="header">Home</Text>
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-});
+//Home tab route. The screen lives in src/features/home
+export default HomeScreen;
