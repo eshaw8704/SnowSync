@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { router } from 'expo-router';
+import { ApiClientError } from '../../../src/api/apiClient';
 import { HomeScreen } from '../../../src/features/home/HomeScreen';
 import { nextStepText } from '../../../src/features/home/nextStepText';
 import { listTrips } from '../../../src/features/trips/tripsApi';
@@ -69,7 +70,7 @@ describe('HomeScreen', () => {
     expect(listTrips).toHaveBeenCalledWith('mine');
     expect(screen.getByLabelText('TRIP: Active')).toBeTruthy();
     expect(screen.getByLabelText('YOU: Registered')).toBeTruthy();
-    fireEvent.press(screen.getByRole('button', { name: 'Northstar club day. Check-in open' }));
+    fireEvent.press(screen.getByRole('button', { name: /Northstar club day.*Check-in open/ }));
     expect(router.push).toHaveBeenCalledWith('/trip/b');
   });
 
@@ -80,5 +81,16 @@ describe('HomeScreen', () => {
     expect(await screen.findByText('No upcoming trips')).toBeTruthy();
     fireEvent.press(screen.getByRole('button', { name: 'Browse trips' }));
     expect(router.push).toHaveBeenCalledWith('/trips');
+  });
+
+  it('shows a Home-specific error without cached-content wording', async () => {
+    signInAs();
+    jest
+      .mocked(listTrips)
+      .mockRejectedValue(new ApiClientError({ code: 'NETWORK_ERROR', message: 'offline' }));
+    render(<HomeScreen />);
+    expect(await screen.findByText("We couldn't load your trips")).toBeTruthy();
+    expect(screen.getByText('Check your connection and try again.')).toBeTruthy();
+    expect(screen.queryByText(/cached/i)).toBeNull();
   });
 });
