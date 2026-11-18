@@ -231,7 +231,7 @@ async function seedTrips(): Promise<number> {
           userId: user.id,
           participation: member.participation,
           registeredById: officer.id,
-          checkedInAt: checkedIn ? new Date(startsAt.getTime() - HOUR / 4) : null,
+          checkedInAt: checkedIn ? new Date(Math.min(startsAt.getTime() - HOUR / 4, now)) : null,
           checkInMethod: checkedIn ? CheckInMethod.OFFICER : null,
           checkedInById: checkedIn ? officer.id : null,
         },

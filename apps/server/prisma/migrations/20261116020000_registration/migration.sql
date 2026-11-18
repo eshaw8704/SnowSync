@@ -151,4 +151,5 @@ SELECT gen_random_uuid(), m."user_id", t."id", 'TRIP', t."cost_cents", 'UNPAID',
 FROM "trip_memberships" m
 JOIN "trips" t ON t."id" = m."trip_id"
 WHERE t."cost_cents" > 0
-  AND m."participation" IN ('REGISTERED', 'CHECKED_IN', 'ACTIVE');
+  AND t."state" <> 'CANCELLED'
+  AND m."participation" IN ('REGISTERED', 'CHECKED_IN', 'ACTIVE', 'CHECKED_OUT', 'LEFT_EARLY');
