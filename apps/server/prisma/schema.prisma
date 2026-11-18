@@ -1,5 +1,4 @@
-// SnowSync database schema (Prisma ORM 7).
-// Model and field names are camelCase in TypeScript and snake_case in PostgreSQL (@map / @@map).
+// SnowSync database schema.
 
 generator client {
   provider = "prisma-client"
@@ -10,7 +9,7 @@ datasource db {
   provider = "postgresql"
 }
 
-/// Club-level role, lowest rank first. Must match UserRole in @snowsync/shared.
+/// Club-level role, lowest rank first.
 enum UserRole {
   MEMBER
   OFFICER
@@ -21,7 +20,7 @@ enum UserRole {
   @@map("user_role")
 }
 
-/// Club membership of one account. Must match MembershipStatus in @snowsync/shared.
+/// Club membership of one account.
 enum MembershipStatus {
   PENDING_APPROVAL
   APPROVED
@@ -32,7 +31,7 @@ enum MembershipStatus {
   @@map("membership_status")
 }
 
-/// Trip lifecycle (System Map §05). Must match TripState in @snowsync/shared.
+/// Trip lifecycle
 enum TripState {
   CREATED
   OPEN_FOR_REGISTRATION
@@ -45,7 +44,7 @@ enum TripState {
   @@map("trip_state")
 }
 
-/// One member's participation in one trip. Must match ParticipationState in @snowsync/shared.
+/// One member's participation in one trip.
 enum ParticipationState {
   NOT_REGISTERED
   REGISTERED
@@ -56,6 +55,56 @@ enum ParticipationState {
   LEFT_EARLY
 
   @@map("participation_state")
+}
+
+/// What a charge is for.
+enum ChargeKind {
+  TRIP
+  DUES
+
+  @@map("charge_kind")
+}
+
+/// Where one charge is.
+enum ChargeStatus {
+  UNPAID
+  PROCESSING
+  PAID
+  FAILED
+  OVERDUE
+  VOID
+  REFUND_REVIEW
+  REFUNDED
+  NOT_REFUNDED
+
+  @@map("charge_status")
+}
+
+/// How a member was checked in.
+enum CheckInMethod {
+  SELF
+  GEOFENCE
+  OFFICER
+
+  @@map("check_in_method")
+}
+
+enum AttendanceMethod {
+  SELF
+  OFFICER
+  GEOFENCE
+  SYSTEM
+
+  @@map("attendance_method")
+}
+
+/// Waitlist entry status. Must match WaitlistStatus in @snowsync/shared.
+enum WaitlistStatus {
+  WAITING
+  CONVERTED
+  LEFT
+
+  @@map("waitlist_status")
 }
 
 /// Who caused a trip transition: an officer, the Scheduler, or a business rule.
@@ -82,7 +131,7 @@ model User {
   email                     String             @unique
   displayName               String             @map("display_name")
   role                      UserRole           @default(MEMBER)
-  /// argon2id hash. Null for accounts that only use Sac State SSO (Sprint 4).
+
   passwordHash              String?            @map("password_hash")
   failedSignInCount         Int                @default(0) @map("failed_sign_in_count")
   signInLockedUntil         DateTime?          @map("sign_in_locked_until") @db.Timestamptz(3)
@@ -106,12 +155,17 @@ model User {
   tripsCreated            Trip[]                   @relation("TripCreatedBy")
   tripMemberships         TripMembership[]         @relation("TripMembershipUser")
   tripRegistrationsAdded  TripMembership[]         @relation("TripMembershipRegisteredBy")
+  tripCheckInsRecorded    TripMembership[]         @relation("TripMembershipCheckedInBy")
+  charges                 Charge[]
+  waitlistEntries         WaitlistEntry[]
+  attendanceActions       AttendanceEvent[]        @relation("AttendanceEventActor")
+  identities              UserIdentity[]
+  ssoLoginCodes           SsoLoginCode[]
 
   @@index([membershipStatus])
   @@map("users")
 }
 
-/// One refresh token. Only its SHA-256 hash is stored. Rotation keeps one family per sign-in.
 model RefreshToken {
   id           String    @id @default(uuid()) @db.Uuid
   userId       String    @map("user_id") @db.Uuid
@@ -244,6 +298,8 @@ model Trip {
   geofence    TripGeofence?
   transitions TripTransition[]
   memberships TripMembership[]
+  charges     Charge[]
+  waitlist    WaitlistEntry[]
 
   @@index([state])
   @@index([startsAt])
@@ -283,6 +339,7 @@ model TripTransition {
 }
 
 /// One member's participation in one trip. Independent of the trip's own state.
+/// Participation only changes through applyParticipationChange, which records an AttendanceEvent.
 model TripMembership {
   id             String             @id @default(uuid()) @db.Uuid
   tripId         String             @map("trip_id") @db.Uuid
@@ -291,12 +348,109 @@ model TripMembership {
   registeredAt   DateTime           @default(now()) @map("registered_at") @db.Timestamptz(3)
   registeredById String?            @map("registered_by_id") @db.Uuid
   version        Int                @default(1)
+  checkedInAt    DateTime?          @map("checked_in_at") @db.Timestamptz(3)
+  checkInMethod  CheckInMethod?     @map("check_in_method")
+  checkedInById  String?            @map("checked_in_by_id") @db.Uuid
+  /// Minutes after the active session started. An annotation, never a state or an emergency.
+  lateMinutes    Int?               @map("late_minutes")
+  cancelledAt    DateTime?          @map("cancelled_at") @db.Timestamptz(3)
 
-  trip         Trip  @relation(fields: [tripId], references: [id], onDelete: Cascade)
-  user         User  @relation("TripMembershipUser", fields: [userId], references: [id], onDelete: Cascade)
-  registeredBy User? @relation("TripMembershipRegisteredBy", fields: [registeredById], references: [id])
+  trip         Trip              @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  user         User              @relation("TripMembershipUser", fields: [userId], references: [id], onDelete: Cascade)
+  registeredBy User?             @relation("TripMembershipRegisteredBy", fields: [registeredById], references: [id])
+  checkedInBy  User?             @relation("TripMembershipCheckedInBy", fields: [checkedInById], references: [id])
+  events       AttendanceEvent[]
 
   @@unique([tripId, userId])
   @@index([userId])
   @@map("trip_memberships")
+}
+
+/// One amount a member owes. Registration and payment are independent.
+/// Charges are never deleted: cancelling voids an unpaid one and sends a paid one to review.
+model Charge {
+  id          String       @id @default(uuid()) @db.Uuid
+  userId      String       @map("user_id") @db.Uuid
+  tripId      String?      @map("trip_id") @db.Uuid
+  kind        ChargeKind
+  amountCents Int          @map("amount_cents")
+  status      ChargeStatus @default(UNPAID)
+  dueAt       DateTime?    @map("due_at") @db.Timestamptz(3)
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  trip Trip? @relation(fields: [tripId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@index([tripId, userId])
+  @@map("charges")
+}
+
+/// Someone waiting for a spot on a full trip. Joining never registers: an officer converts them.
+model WaitlistEntry {
+  id        String         @id @default(uuid()) @db.Uuid
+  tripId    String         @map("trip_id") @db.Uuid
+  userId    String         @map("user_id") @db.Uuid
+  status    WaitlistStatus @default(WAITING)
+  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tripId, userId])
+  @@index([tripId, status, createdAt])
+  @@map("waitlist_entries")
+}
+
+/// Every participation change: from, to, who or what caused it, and the opId that makes it idempotent.
+model AttendanceEvent {
+  id               String             @id @default(uuid()) @db.Uuid
+  tripMembershipId String             @map("trip_membership_id") @db.Uuid
+  fromState        ParticipationState @map("from_state")
+  toState          ParticipationState @map("to_state")
+  method           AttendanceMethod
+  actorId          String?            @map("actor_id") @db.Uuid
+  reason           String?
+  lateMinutes      Int?               @map("late_minutes")
+  opId             String             @unique @map("op_id")
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tripMembership TripMembership @relation(fields: [tripMembershipId], references: [id], onDelete: Cascade)
+  actor          User?          @relation("AttendanceEventActor", fields: [actorId], references: [id])
+
+  @@index([tripMembershipId])
+  @@map("attendance_events")
+}
+
+/// A sign-in identity from an outside provider. One account can have several.
+model UserIdentity {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  provider  String
+  /// The provider's stable id for the person. Never the email, which can change.
+  subject   String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, subject])
+  @@index([userId])
+  @@map("user_identities")
+}
+
+/// One-time code the SSO callback hands to the phone. Only its SHA-256 hash is stored.
+model SsoLoginCode {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  codeHash  String    @unique @map("code_hash")
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sso_login_codes")
 }
