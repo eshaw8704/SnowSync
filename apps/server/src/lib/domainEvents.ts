@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import type { TripState } from '@snowsync/shared';
+import type { AttendanceMethod, ParticipationState, TripState } from '@snowsync/shared';
 import { logger } from './logger';
 
 /** A trip changed state. Emitted only after the transaction that changed it has committed. */
@@ -12,9 +12,21 @@ export interface TripStateChanged {
   actorType: 'USER' | 'SCHEDULER' | 'RULE';
 }
 
-/** Every in-process domain event, by name. Later sprints add ParticipationChanged, TripExitStarted… */
+/** One member's participation changed. Emitted only after the transaction has committed. */
+export interface ParticipationChanged {
+  tripId: string;
+  userId: string;
+  fromState: ParticipationState;
+  toState: ParticipationState;
+  method: AttendanceMethod;
+  /** The membership's version after the change. */
+  version: number;
+}
+
+/** Every in-process domain event, by name. Later sprints add TripExitStarted… */
 export interface DomainEvents {
   TripStateChanged: TripStateChanged;
+  ParticipationChanged: ParticipationChanged;
 }
 
 const emitter = new EventEmitter();
