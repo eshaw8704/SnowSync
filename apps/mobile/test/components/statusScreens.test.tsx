@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react-native';
+import { render, screen, within } from '@testing-library/react-native';
+import { ScrollView } from 'react-native';
 import { DetailCard } from '../../src/components/DetailCard';
 import { StatusHero } from '../../src/components/StatusHero';
 import { StatusLayout } from '../../src/components/StatusLayout';
@@ -54,13 +55,17 @@ describe('DetailCard', () => {
 });
 
 describe('StatusLayout', () => {
-  it('shows the content and the pinned footer', () => {
+  it('shows the content and keeps the footer outside the scroll area', () => {
     render(
       <StatusLayout footer={<Text>Confirm registration</Text>}>
         <Text>Reserve your spot?</Text>
       </StatusLayout>,
     );
-    expect(screen.getByText('Reserve your spot?')).toBeTruthy();
+
+    const scrollView = screen.UNSAFE_getByType(ScrollView);
+
+    expect(within(scrollView).getByText('Reserve your spot?')).toBeTruthy();
     expect(screen.getByText('Confirm registration')).toBeTruthy();
+    expect(within(scrollView).queryByText('Confirm registration')).toBeNull();
   });
 });

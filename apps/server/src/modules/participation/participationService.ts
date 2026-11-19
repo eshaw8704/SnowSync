@@ -50,6 +50,45 @@ export type ApplyParticipationChange = (
   change: ParticipationChange,
 ) => Promise<ParticipationChangeResult>;
 
+async function replayIfSeen(
+  tx: Prisma.TransactionClient,
+  change: ParticipationChange,
+): Promise<ParticipationChangeResult | null> {
+  const seen = await tx.attendanceEvent.findUnique({
+    where: { opId: change.opId },
+    select: {
+      fromState: true,
+      toState: true,
+      method: true,
+      actorId: true,
+      tripMembership: {
+        select: { tripId: true, userId: true },
+      },
+    },
+  });
+
+  if (!seen) {
+    return null;
+  }
+
+  if (
+    seen.tripMembership.tripId !== change.tripId ||
+    seen.tripMembership.userId !== change.userId ||
+    seen.fromState !== change.from ||
+    seen.toState !== change.to ||
+    seen.method !== change.method ||
+    seen.actorId !== change.actorId
+  ) {
+    throw new HttpError(
+      'CONFLICT',
+      'This operation ID belongs to a different participation change.',
+      { reason: RegistrationErrorReason.PARTICIPATION_NOT_ALLOWED },
+    );
+  }
+
+  return current(tx, change.tripId, change.userId, true, true);
+}
+
 async function current(
   tx: Prisma.TransactionClient,
   tripId: string,
@@ -75,9 +114,9 @@ export async function applyParticipationChange(
   change: ParticipationChange,
   pending: ParticipationChanged[] = [],
 ): Promise<ParticipationChangeResult> {
-  const seen = await tx.attendanceEvent.findUnique({ where: { opId: change.opId } });
-  if (seen) {
-    return current(tx, change.tripId, change.userId, true, true);
+  const replay = await replayIfSeen(tx, change);
+  if (replay) {
+    return replay;
   }
   if (!canChangeParticipation(change.from, change.to)) {
     throw new HttpError(
@@ -85,6 +124,59 @@ export async function applyParticipationChange(
       `Participation cannot move from ${change.from} to ${change.to}.`,
       { reason: RegistrationErrorReason.PARTICIPATION_NOT_ALLOWED },
     );
+  }
+
+  const fields: MembershipFields = { ...change.set };
+
+  if (
+    change.lateMinutes !== undefined &&
+    fields.lateMinutes !== undefined &&
+    change.lateMinutes !== fields.lateMinutes
+  ) {
+    throw new HttpError(
+      'VALIDATION_FAILED',
+      'Late minutes differ between the event and membership.',
+    );
+  }
+
+  const lateMinutes = change.lateMinutes ?? fields.lateMinutes ?? null;
+
+  if (change.lateMinutes !== undefined || fields.lateMinutes !== undefined) {
+    fields.lateMinutes = lateMinutes;
+  }
+
+  if (change.to === 'CHECKED_IN') {
+    if (change.method === 'SYSTEM') {
+      throw new HttpError(
+        'VALIDATION_FAILED',
+        'Check-in needs a member, officer, or geofence method.',
+      );
+    }
+
+    if (fields.checkInMethod != null && fields.checkInMethod !== change.method) {
+      throw new HttpError('VALIDATION_FAILED', 'Check-in methods do not match.');
+    }
+
+    fields.checkInMethod = change.method;
+    fields.checkedInAt ??= new Date();
+
+    if (change.method === 'OFFICER') {
+      if (!change.actorId) {
+        throw new HttpError('VALIDATION_FAILED', 'Officer check-in requires an officer actor.');
+      }
+
+      if (fields.checkedInById != null && fields.checkedInById !== change.actorId) {
+        throw new HttpError('VALIDATION_FAILED', 'Check-in officer does not match the actor.');
+      }
+
+      fields.checkedInById = change.actorId;
+    } else {
+      if (fields.checkedInById != null) {
+        throw new HttpError('VALIDATION_FAILED', 'Self/geofence check-in cannot name an officer.');
+      }
+
+      fields.checkedInById = null;
+    }
   }
 
   const where = { tripId: change.tripId, userId: change.userId };
@@ -99,7 +191,7 @@ export async function applyParticipationChange(
       return current(tx, change.tripId, change.userId, false, false);
     }
     const created = await tx.tripMembership.create({
-      data: { ...where, ...change.set, participation: change.to },
+      data: { ...where, ...fields, participation: change.to },
       select: { id: true, version: true },
     });
     membershipId = created.id;
@@ -107,9 +199,15 @@ export async function applyParticipationChange(
   } else {
     const moved = await tx.tripMembership.updateMany({
       where: { id: existing.id, participation: change.from },
-      data: { ...change.set, participation: change.to, version: { increment: 1 } },
+      data: { ...fields, participation: change.to, version: { increment: 1 } },
     });
     if (moved.count === 0) {
+      const replayAfterRace = await replayIfSeen(tx, change);
+
+      if (replayAfterRace) {
+        return replayAfterRace;
+      }
+
       return current(tx, change.tripId, change.userId, false, false);
     }
     const row = await tx.tripMembership.findUniqueOrThrow({
@@ -128,7 +226,7 @@ export async function applyParticipationChange(
       method: change.method,
       actorId: change.actorId,
       reason: change.reason ?? null,
-      lateMinutes: change.lateMinutes ?? null,
+      lateMinutes,
       opId: change.opId,
     },
   });

@@ -134,6 +134,99 @@ describe('applyParticipationChange()', () => {
     ).rejects.toMatchObject({ code: 'CONFLICT', details: { reason: 'PARTICIPATION_NOT_ALLOWED' } });
   });
 
+  it('rejects an opId reused for a different member', async () => {
+    const { member, trip } = await setup();
+    const anotherMember = await createUser();
+    const opId = randomUUID();
+
+    await participationTransaction((_tx, apply) =>
+      apply(change({ tripId: trip.id, userId: member.id }, { opId })),
+    );
+
+    await expect(
+      participationTransaction((_tx, apply) =>
+        apply(change({ tripId: trip.id, userId: anotherMember.id }, { opId })),
+      ),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+
+    expect(await prisma.attendanceEvent.count()).toBe(1);
+    expect(await prisma.tripMembership.count()).toBe(1);
+  });
+
+  it('handles concurrent retries of the same participation change', async () => {
+    const { officer, member, trip } = await setup('REGISTERED');
+
+    const request = change(
+      { tripId: trip.id, userId: member.id },
+      {
+        from: 'REGISTERED',
+        to: 'CHECKED_IN',
+        method: 'OFFICER',
+        actorId: officer.id,
+      },
+    );
+
+    const results = await Promise.all([
+      participationTransaction((_tx, apply) => apply(request)),
+      participationTransaction((_tx, apply) => apply(request)),
+    ]);
+
+    expect(results.every((result) => result.applied)).toBe(true);
+    expect(results.some((result) => result.replayed)).toBe(true);
+    expect(await prisma.attendanceEvent.count()).toBe(1);
+  });
+
+  it('rejects mismatched late-minute values', async () => {
+    const { officer, member, trip } = await setup('REGISTERED');
+
+    await expect(
+      participationTransaction((_tx, apply) =>
+        apply(
+          change(
+            { tripId: trip.id, userId: member.id },
+            {
+              from: 'REGISTERED',
+              to: 'CHECKED_IN',
+              method: 'OFFICER',
+              actorId: officer.id,
+              lateMinutes: 12,
+              set: { lateMinutes: 5 },
+            },
+          ),
+        ),
+      ),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+
+    const membership = await prisma.tripMembership.findFirstOrThrow();
+    expect(membership.participation).toBe('REGISTERED');
+    expect(await prisma.attendanceEvent.count()).toBe(0);
+  });
+
+  it('records check-in metadata when optional fields are omitted', async () => {
+    const { officer, member, trip } = await setup('REGISTERED');
+
+    await participationTransaction((_tx, apply) =>
+      apply(
+        change(
+          { tripId: trip.id, userId: member.id },
+          {
+            from: 'REGISTERED',
+            to: 'CHECKED_IN',
+            method: 'OFFICER',
+            actorId: officer.id,
+          },
+        ),
+      ),
+    );
+
+    const membership = await prisma.tripMembership.findFirstOrThrow();
+
+    expect(membership.participation).toBe('CHECKED_IN');
+    expect(membership.checkedInAt).toBeInstanceOf(Date);
+    expect(membership.checkInMethod).toBe('OFFICER');
+    expect(membership.checkedInById).toBe(officer.id);
+  });
+
   it('emits nothing and keeps nothing when the transaction rolls back', async () => {
     const { member, trip } = await setup();
     await expect(
