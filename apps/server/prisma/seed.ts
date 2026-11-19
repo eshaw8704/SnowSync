@@ -1,6 +1,9 @@
 import { disconnectDatabase, prisma } from '../src/db/prisma';
 import { RESORTS } from '@snowsync/shared';
 import {
+  ChargeKind,
+  ChargeStatus,
+  CheckInMethod,
   MembershipStatus,
   ParticipationState,
   TripState,
@@ -74,10 +77,12 @@ interface SampleTrip {
   startsIn: number;
   registrationOpensIn: number;
   registrationClosesIn: number;
+  /** Spots on the trip. Defaults to 24. */
+  capacity?: number;
   roster: { email: string; participation: ParticipationState }[];
 }
 
-/** Fixed ids so re-running the seed updates the same four trips instead of adding more. */
+/** Fixed ids so re-running the seed updates the same six trips instead of adding more. */
 const SAMPLE_TRIPS: SampleTrip[] = [
   {
     id: '5e1d0a10-0000-4000-8000-000000000001',
@@ -129,16 +134,57 @@ const SAMPLE_TRIPS: SampleTrip[] = [
       { email: 'member3@example.com', participation: ParticipationState.LEFT_EARLY },
     ],
   },
+  {
+    id: '5e1d0a10-0000-4000-8000-000000000005',
+    name: 'Boreal night ride',
+    resortName: 'Boreal',
+    state: TripState.OPEN_FOR_REGISTRATION,
+    startsIn: 10 * DAY,
+    registrationOpensIn: -3 * DAY,
+    registrationClosesIn: 8 * DAY,
+    capacity: 3,
+    roster: [
+      { email: 'officer@example.com', participation: ParticipationState.REGISTERED },
+      { email: 'member2@example.com', participation: ParticipationState.REGISTERED },
+      { email: 'member3@example.com', participation: ParticipationState.REGISTERED },
+    ],
+  },
+  {
+    // Check-in is open: officers can check people in from the roster.
+    id: '5e1d0a10-0000-4000-8000-000000000006',
+    name: 'Northstar club day',
+    resortName: 'Northstar California',
+    state: TripState.CHECK_IN,
+    startsIn: 20 * 60 * 1000,
+    registrationOpensIn: -10 * DAY,
+    registrationClosesIn: -1 * DAY,
+    roster: [
+      { email: 'officer@example.com', participation: ParticipationState.CHECKED_IN },
+      { email: 'member1@example.com', participation: ParticipationState.REGISTERED },
+      { email: 'member2@example.com', participation: ParticipationState.REGISTERED },
+      { email: 'member3@example.com', participation: ParticipationState.REGISTERED },
+    ],
+  },
+];
+
+/** Participations that owe the trip charge in the seed. */
+const OWES_TRIP_CHARGE: ParticipationState[] = [
+  ParticipationState.REGISTERED,
+  ParticipationState.CHECKED_IN,
+  ParticipationState.ACTIVE,
+  ParticipationState.CHECKED_OUT,
+  ParticipationState.LEFT_EARLY,
 ];
 
 /** Upserts the sample trips with their geofences and rosters. Returns how many there are. */
 async function seedTrips(): Promise<number> {
   const officer = await prisma.user.findUniqueOrThrow({ where: { email: 'officer@example.com' } });
   const now = Date.now();
-  // Old transition rows would block the Scheduler's fixed opIds after a re-seed. WON'T AFFECT USERS IN DEPLOYMENT. ONLY FOR TESTING DURING DEVELOPMENT
-  await prisma.tripTransition.deleteMany({
-    where: { tripId: { in: SAMPLE_TRIPS.map((trip) => trip.id) } },
-  });
+  const sampleIds = SAMPLE_TRIPS.map((trip) => trip.id);
+  await prisma.tripTransition.deleteMany({ where: { tripId: { in: sampleIds } } });
+  await prisma.charge.deleteMany({ where: { tripId: { in: sampleIds } } });
+  await prisma.waitlistEntry.deleteMany({ where: { tripId: { in: sampleIds } } });
+  await prisma.tripMembership.deleteMany({ where: { tripId: { in: sampleIds } } });
   for (const sample of SAMPLE_TRIPS) {
     const resort = RESORTS.find((r) => r.name === sample.resortName)!;
     const startsAt = new Date(now + sample.startsIn);
@@ -150,7 +196,7 @@ async function seedTrips(): Promise<number> {
       resortTimeZone: resort.timeZone,
       startsAt,
       endsAt,
-      capacity: 24,
+      capacity: sample.capacity ?? 24,
       costCents: 4500,
       state: sample.state,
       registrationOpensAt: new Date(now + sample.registrationOpensIn),
@@ -178,16 +224,30 @@ async function seedTrips(): Promise<number> {
     });
     for (const member of sample.roster) {
       const user = await prisma.user.findUniqueOrThrow({ where: { email: member.email } });
-      await prisma.tripMembership.upsert({
-        where: { tripId_userId: { tripId: sample.id, userId: user.id } },
-        update: { participation: member.participation },
-        create: {
+      const checkedIn = member.participation !== ParticipationState.REGISTERED;
+      await prisma.tripMembership.create({
+        data: {
           tripId: sample.id,
           userId: user.id,
           participation: member.participation,
           registeredById: officer.id,
+          checkedInAt: checkedIn ? new Date(Math.min(startsAt.getTime() - HOUR / 4, now)) : null,
+          checkInMethod: checkedIn ? CheckInMethod.OFFICER : null,
+          checkedInById: checkedIn ? officer.id : null,
         },
       });
+      if (OWES_TRIP_CHARGE.includes(member.participation)) {
+        await prisma.charge.create({
+          data: {
+            userId: user.id,
+            tripId: sample.id,
+            kind: ChargeKind.TRIP,
+            amountCents: data.costCents,
+            status: ChargeStatus.UNPAID,
+            dueAt: data.registrationClosesAt,
+          },
+        });
+      }
     }
   }
   return SAMPLE_TRIPS.length;

@@ -2,6 +2,11 @@ import { prisma } from '../../src/db/prisma';
 
 /** Every table, children first. Add new tables here when a migration creates them. */
 const TABLES = [
+  'sso_login_codes',
+  'user_identities',
+  'attendance_events',
+  'waitlist_entries',
+  'charges',
   'trip_memberships',
   'trip_transitions',
   'trip_geofences',
