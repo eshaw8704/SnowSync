@@ -42,7 +42,7 @@ async function latestCharges(
 ): Promise<Map<string, ChargeRow>> {
   const charges = await client.charge.findMany({
     where: { tripId, kind: 'TRIP', ...(userIds ? { userId: { in: userIds } } : {}) },
-    orderBy: { createdAt: 'asc' },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     select: { userId: true, status: true, amountCents: true },
   });
   // Later rows overwrite earlier ones, so each user keeps their newest charge.
