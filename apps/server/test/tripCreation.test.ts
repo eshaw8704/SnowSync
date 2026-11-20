@@ -36,6 +36,35 @@ describe('POST /trips', () => {
     ).resolves.toBe(1);
   });
 
+  it('gives every initial roster member an UNPAID trip charge and an attendance event', async () => {
+    const officer = await createUser({ role: 'OFFICER' });
+    const maya = await createUser();
+    const sam = await createUser();
+    const res = await request(createApp())
+      .post('/trips')
+      .set('Authorization', await bearerFor(officer.id))
+      .send(validTripRequest({ rosterUserIds: [maya.id, sam.id], costCents: 5000 }));
+
+    expect(res.status).toBe(201);
+    const charges = await prisma.charge.findMany({ where: { tripId: res.body.data.id } });
+    expect(charges.map((charge) => charge.userId).sort()).toEqual([maya.id, sam.id].sort());
+    expect(charges.every((c) => c.status === 'UNPAID' && c.amountCents === 5000)).toBe(true);
+    await expect(
+      prisma.attendanceEvent.count({ where: { method: 'OFFICER', actorId: officer.id } }),
+    ).resolves.toBe(2);
+  });
+
+  it('creates no charges for a free trip', async () => {
+    const officer = await createUser({ role: 'OFFICER' });
+    const maya = await createUser();
+    const res = await request(createApp())
+      .post('/trips')
+      .set('Authorization', await bearerFor(officer.id))
+      .send(validTripRequest({ rosterUserIds: [maya.id], costCents: 0 }));
+    expect(res.status).toBe(201);
+    await expect(prisma.charge.count()).resolves.toBe(0);
+  });
+
   it('is forbidden for members', async () => {
     const member = await createUser({ role: 'MEMBER' });
     const res = await request(createApp())

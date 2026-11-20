@@ -2,6 +2,8 @@ import { findResort, type CreateTripRequest, type TripDetail } from '@snowsync/s
 import { prisma } from '../../db/prisma';
 import { recordAudit } from '../../lib/auditLog';
 import { HttpError } from '../../lib/httpError';
+import { createTripCharge } from '../charges/chargeService';
+import { participationTransaction } from '../participation/participationService';
 import { loadTripDetail } from './tripReadModel';
 
 /**
@@ -32,7 +34,7 @@ export async function createTrip(actorId: string, input: CreateTripRequest): Pro
     }
   }
 
-  return prisma.$transaction(async (tx) => {
+  return participationTransaction(async (tx, apply) => {
     const trip = await tx.trip.create({
       data: {
         name: input.name,
@@ -58,15 +60,24 @@ export async function createTrip(actorId: string, input: CreateTripRequest): Pro
             label: resort.baseLodgeLabel,
           },
         },
-        memberships: {
-          create: rosterIds.map((userId) => ({
-            userId,
-            participation: 'REGISTERED' as const,
-            registeredById: actorId,
-          })),
-        },
       },
     });
+
+    for (const userId of rosterIds) {
+      await apply({
+        tripId: trip.id,
+        userId,
+        from: 'NOT_REGISTERED',
+        to: 'REGISTERED',
+        method: 'OFFICER',
+        actorId,
+        opId: `trip-created:${trip.id}:${userId}`,
+        set: { registeredById: actorId },
+      });
+
+      await createTripCharge(tx, userId, trip);
+    }
+
     await recordAudit(
       {
         actorId,
