@@ -48,10 +48,27 @@ describe('POST /trips', () => {
     expect(res.status).toBe(201);
     const charges = await prisma.charge.findMany({ where: { tripId: res.body.data.id } });
     expect(charges.map((charge) => charge.userId).sort()).toEqual([maya.id, sam.id].sort());
-    expect(charges.every((c) => c.status === 'UNPAID' && c.amountCents === 5000)).toBe(true);
-    await expect(
-      prisma.attendanceEvent.count({ where: { method: 'OFFICER', actorId: officer.id } }),
-    ).resolves.toBe(2);
+    expect(
+      charges.every((c) => c.kind === 'TRIP' && c.status === 'UNPAID' && c.amountCents === 5000),
+    ).toBe(true);
+    const attendance = await prisma.attendanceEvent.findMany({
+      where: {
+        method: 'OFFICER',
+        actorId: officer.id,
+        tripMembership: {
+          is: { tripId: res.body.data.id },
+        },
+      },
+      select: {
+        tripMembership: {
+          select: { userId: true },
+        },
+      },
+    });
+
+    expect(attendance.map((event) => event.tripMembership.userId).sort()).toEqual(
+      [maya.id, sam.id].sort(),
+    );
   });
 
   it('creates no charges for a free trip', async () => {

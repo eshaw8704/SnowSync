@@ -46,10 +46,20 @@ describe('trip charges', () => {
     const { member, trip } = await setup();
     await createTripCharge(prisma, member.id, trip);
     await expect(releaseTripCharge(prisma, member.id, trip.id)).resolves.toBe('VOID');
+    expect(
+      await prisma.charge.count({
+        where: { userId: member.id, tripId: trip.id, status: 'VOID' },
+      }),
+    ).toBe(1);
 
     await createTripCharge(prisma, member.id, trip);
     await prisma.charge.updateMany({ where: { status: 'UNPAID' }, data: { status: 'PAID' } });
     await expect(releaseTripCharge(prisma, member.id, trip.id)).resolves.toBe('REFUND_REVIEW');
+    expect(
+      await prisma.charge.count({
+        where: { userId: member.id, tripId: trip.id, status: 'REFUND_REVIEW' },
+      }),
+    ).toBe(1);
     expect(await prisma.charge.count()).toBe(2);
   });
 
