@@ -1,3 +1,4 @@
+import { env } from '../src/config/env';
 import { disconnectDatabase, prisma } from '../src/db/prisma';
 import { RESORTS } from '@snowsync/shared';
 import {
@@ -29,6 +30,11 @@ const SAMPLE_USERS = [
 const PENDING_USER = { email: 'pending@example.com', displayName: 'Riley Pending' } as const;
 
 async function main(): Promise<void> {
+  // The seed password is public (it is in this repository), and the seed creates a PRESIDENT and
+  // deletes sample-trip charges. It must never run against a production database.
+  if (env.NODE_ENV === 'production') {
+    throw new Error('Refusing to seed: NODE_ENV is production. The seed is for local development.');
+  }
   const passwordHash = await hashPassword(SEED_PASSWORD);
   const approved = {
     membershipStatus: MembershipStatus.APPROVED,

@@ -26,11 +26,36 @@ async function currentResult(tripId: string, applied: boolean): Promise<Transiti
   return { applied, currentState: trip.state, version: trip.version };
 }
 
+/**
+ * The recorded result for `command.opId`, or null when that opId has never been applied. An opId
+ * that was recorded for a different trip or transition is refused, so a reused id can never report
+ * success for a change that did not happen.
+ */
+async function replayIfSeen(command: TransitionCommand): Promise<TransitionResponse | null> {
+  const seen = await prisma.tripTransition.findUnique({
+    where: { opId: command.opId },
+    select: { tripId: true, fromState: true, toState: true },
+  });
+  if (!seen) {
+    return null;
+  }
+  if (
+    seen.tripId !== command.tripId ||
+    seen.fromState !== command.fromState ||
+    seen.toState !== command.toState
+  ) {
+    throw new HttpError('CONFLICT', 'This operation ID belongs to a different trip change.', {
+      reason: 'TRANSITION_NOT_ALLOWED',
+    });
+  }
+  return currentResult(command.tripId, true);
+}
+
 /** The only function that changes a trip's state. A repeated opId or a trip that already moved changes nothing. */
 export async function transition(command: TransitionCommand): Promise<TransitionResponse> {
-  const seen = await prisma.tripTransition.findUnique({ where: { opId: command.opId } });
-  if (seen) {
-    return currentResult(seen.tripId, true);
+  const replay = await replayIfSeen(command);
+  if (replay) {
+    return replay;
   }
   if (!canTransition(command.fromState, command.toState)) {
     throw new HttpError(
@@ -70,13 +95,17 @@ export async function transition(command: TransitionCommand): Promise<Transition
   } catch (error) {
     // The same opId arrived twice at once; the other request already applied it.
     if (isUniqueViolation(error)) {
-      return currentResult(command.tripId, true);
+      const replay = await replayIfSeen(command);
+      if (replay) {
+        return replay;
+      }
     }
     throw error;
   }
 
   if (!result.applied) {
-    return currentResult(command.tripId, false);
+    // A concurrent retry with this opId may have committed while we waited on the trip row.
+    return (await replayIfSeen(command)) ?? currentResult(command.tripId, false);
   }
   domainEvents.emit('TripStateChanged', {
     tripId: command.tripId,

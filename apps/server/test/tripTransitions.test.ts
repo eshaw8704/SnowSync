@@ -83,6 +83,17 @@ describe('transition()', () => {
     expect(again).toEqual({ applied: true, currentState: 'OPEN_FOR_REGISTRATION', version: 2 });
     await expect(prisma.tripTransition.count()).resolves.toBe(1);
     expect(events).toHaveBeenCalledTimes(1);
+
+    // The same opId sent for another trip is refused instead of reporting a success that never happened.
+    const other = await createTrip({ createdById: officer.id });
+    await expect(transition({ ...command, tripId: other.id })).rejects.toMatchObject({
+      code: 'CONFLICT',
+      details: { reason: 'TRANSITION_NOT_ALLOWED' },
+    });
+    await expect(prisma.trip.findUniqueOrThrow({ where: { id: other.id } })).resolves.toMatchObject(
+      { state: 'CREATED', version: 1 },
+    );
+    await expect(prisma.tripTransition.count()).resolves.toBe(1);
   });
 
   it('refuses transitions the state machine does not allow', async () => {
@@ -124,6 +135,21 @@ describe('transition()', () => {
       state: 'CHECK_IN',
       version: 2,
     });
+
+    // The same request sent twice at once (a retry) reports the one committed change to both.
+    const retried = { ...base, fromState: 'CHECK_IN' as const, toState: 'ACTIVE' as const };
+    const command = {
+      ...retried,
+      actorType: 'USER' as const,
+      actorId: officer.id,
+      opId: randomUUID(),
+    };
+    const both = await Promise.all([transition(command), transition(command)]);
+    expect(both).toEqual([
+      { applied: true, currentState: 'ACTIVE', version: 3 },
+      { applied: true, currentState: 'ACTIVE', version: 3 },
+    ]);
+    await expect(prisma.tripTransition.count()).resolves.toBe(2);
   });
 });
 

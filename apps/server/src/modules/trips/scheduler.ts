@@ -70,22 +70,33 @@ export async function runSchedulerTick(
   );
 }
 
+/** The tick that is running right now, so shutdown can wait for it before closing the database. */
+let activeTick: Promise<void> | null = null;
+
 /** Starts ticking every SCHEDULER_INTERVAL_SECONDS. Calling it twice does nothing. */
 export function startScheduler(): void {
   if (timer) return;
   timer = setInterval(() => {
-    runSchedulerTick().catch((error: unknown) => {
-      logger.error({ err: error }, 'Scheduler tick failed');
-    });
+    // A tick still running holds the advisory lock, so a second one would only be skipped.
+    if (activeTick) return;
+    activeTick = runSchedulerTick()
+      .then(() => undefined)
+      .catch((error: unknown) => {
+        logger.error({ err: error }, 'Scheduler tick failed');
+      })
+      .finally(() => {
+        activeTick = null;
+      });
   }, env.SCHEDULER_INTERVAL_SECONDS * 1000);
   timer.unref();
   logger.info({ intervalSeconds: env.SCHEDULER_INTERVAL_SECONDS }, 'Trip scheduler started');
 }
 
-/** Stops the Scheduler. Safe to call when it never started. */
-export function stopScheduler(): void {
+/** Stops the Scheduler and waits for a running tick to finish. Safe to call when it never started. */
+export async function stopScheduler(): Promise<void> {
   if (timer) {
     clearInterval(timer);
     timer = null;
   }
+  await activeTick;
 }
