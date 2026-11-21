@@ -29,11 +29,22 @@ const SAMPLE_USERS = [
 /** One account still waiting for approval, so the approvals screen has something to show. */
 const PENDING_USER = { email: 'pending@example.com', displayName: 'Riley Pending' } as const;
 
+/** Hosts the seed may write to: this machine, or the docker-compose `postgres` service. */
+const LOCAL_DATABASE_HOSTS = ['localhost', '127.0.0.1', '[::1]', 'postgres'];
+
 async function main(): Promise<void> {
   // The seed password is public (it is in this repository), and the seed creates a PRESIDENT and
-  // deletes sample-trip charges. It must never run against a production database.
+  // deletes sample-trip charges. It must never run against a production database, so it checks both
+  // NODE_ENV and where DATABASE_URL actually points: only a database on this machine (or the
+  // docker-compose `postgres` service) may be seeded.
   if (env.NODE_ENV === 'production') {
     throw new Error('Refusing to seed: NODE_ENV is production. The seed is for local development.');
+  }
+  const host = new URL(env.DATABASE_URL).hostname;
+  if (!LOCAL_DATABASE_HOSTS.includes(host)) {
+    throw new Error(
+      `Refusing to seed: DATABASE_URL points at "${host}", not a local database. The seed is for local development.`,
+    );
   }
   const passwordHash = await hashPassword(SEED_PASSWORD);
   const approved = {

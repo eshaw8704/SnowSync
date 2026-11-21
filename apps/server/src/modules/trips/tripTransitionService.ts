@@ -28,13 +28,20 @@ async function currentResult(tripId: string, applied: boolean): Promise<Transiti
 
 /**
  * The recorded result for `command.opId`, or null when that opId has never been applied. An opId
- * that was recorded for a different trip or transition is refused, so a reused id can never report
- * success for a change that did not happen.
+ * recorded for a different command (trip, transition, actor or reason) is refused, so a reused id
+ * can never report success for a change that did not happen or that the audit trail does not show.
  */
 async function replayIfSeen(command: TransitionCommand): Promise<TransitionResponse | null> {
   const seen = await prisma.tripTransition.findUnique({
     where: { opId: command.opId },
-    select: { tripId: true, fromState: true, toState: true },
+    select: {
+      tripId: true,
+      fromState: true,
+      toState: true,
+      actorType: true,
+      actorId: true,
+      reason: true,
+    },
   });
   if (!seen) {
     return null;
@@ -42,7 +49,10 @@ async function replayIfSeen(command: TransitionCommand): Promise<TransitionRespo
   if (
     seen.tripId !== command.tripId ||
     seen.fromState !== command.fromState ||
-    seen.toState !== command.toState
+    seen.toState !== command.toState ||
+    seen.actorType !== command.actorType ||
+    seen.actorId !== command.actorId ||
+    seen.reason !== (command.reason ?? null)
   ) {
     throw new HttpError('CONFLICT', 'This operation ID belongs to a different trip change.', {
       reason: 'TRANSITION_NOT_ALLOWED',

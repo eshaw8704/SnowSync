@@ -94,6 +94,15 @@ describe('transition()', () => {
       { state: 'CREATED', version: 1 },
     );
     await expect(prisma.tripTransition.count()).resolves.toBe(1);
+
+    // A retry that changes the actor or the reason is refused: the audit trail keeps the original.
+    const otherOfficer = await createUser({ role: 'OFFICER' });
+    for (const changed of [{ actorId: otherOfficer.id }, { reason: 'A different reason' }]) {
+      await expect(transition({ ...command, ...changed })).rejects.toMatchObject({
+        code: 'CONFLICT',
+        details: { reason: 'TRANSITION_NOT_ALLOWED' },
+      });
+    }
   });
 
   it('refuses transitions the state machine does not allow', async () => {
