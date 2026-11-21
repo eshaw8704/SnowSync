@@ -170,9 +170,11 @@ export function isRegistrationOpen(trip: LockedTrip, now = new Date()): boolean 
 }
 
 /**
- * The answer to a retried registration. Returns null when the opId is unused, the member's current
- * registration when the opId registered this member on this trip, and throws CONFLICT when it
- * belongs to another member, trip or change, so a reused opId never reports a false success.
+ * The answer to a retried registration. Returns null when the opId is unused. When the opId is this
+ * member's own self-registration on this trip, returns their registration as it is now, so a retry
+ * that arrives after they cancelled reports NOT_REGISTERED with alreadyRegistered false. Throws
+ * CONFLICT when the opId belongs to any other change, so a reused opId never reports a false
+ * success. Checks the same fields as the participation helper's own replay check.
  */
 async function replayRegistration(
   userId: string,
@@ -181,7 +183,13 @@ async function replayRegistration(
 ): Promise<RegisterResult | null> {
   const seen = await prisma.attendanceEvent.findUnique({
     where: { opId },
-    select: { toState: true, tripMembership: { select: { tripId: true, userId: true } } },
+    select: {
+      fromState: true,
+      toState: true,
+      method: true,
+      actorId: true,
+      tripMembership: { select: { tripId: true, userId: true } },
+    },
   });
   if (!seen) {
     return null;
@@ -189,7 +197,10 @@ async function replayRegistration(
   if (
     seen.tripMembership.tripId !== tripId ||
     seen.tripMembership.userId !== userId ||
-    seen.toState !== 'REGISTERED'
+    seen.fromState !== 'NOT_REGISTERED' ||
+    seen.toState !== 'REGISTERED' ||
+    seen.method !== 'SELF' ||
+    seen.actorId !== userId
   ) {
     throw new HttpError(
       'CONFLICT',
@@ -199,10 +210,8 @@ async function replayRegistration(
       },
     );
   }
-  return {
-    registration: await loadMyRegistration(prisma, tripId, userId),
-    alreadyRegistered: true,
-  };
+  const registration = await loadMyRegistration(prisma, tripId, userId);
+  return { registration, alreadyRegistered: holdsSpot(registration.participation) };
 }
 
 /**
@@ -243,10 +252,8 @@ export async function registerSelf(
         actorId: userId,
         opId,
       });
-      return {
-        registration: await loadMyRegistration(tx, tripId, userId),
-        alreadyRegistered: !added,
-      };
+      const registration = await loadMyRegistration(tx, tripId, userId);
+      return { registration, alreadyRegistered: !added && holdsSpot(registration.participation) };
     });
   } catch (error) {
     // The same opId arrived twice at once and the other request applied it first. It is a retry

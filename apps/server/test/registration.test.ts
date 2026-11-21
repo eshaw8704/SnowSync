@@ -80,35 +80,56 @@ describe('POST /trips/:tripId/registration', () => {
     expect(await prisma.attendanceEvent.count()).toBe(1);
   });
 
-  it('rejects an opId that already registered another member or another trip', async () => {
+  it('rejects an opId that belongs to a different participation change', async () => {
     const trip = await openTrip();
     const otherTrip = await openTrip();
+    const officer = await createUser({ role: 'OFFICER' });
     const member = await createUser();
     const other = await createUser();
     const opId = randomUUID();
     await register(member.id, trip.id, opId);
+    // An officer adds the member to the other trip (roster add, SS-180) with the officer's own opId.
+    const officerOpId = randomUUID();
+    await participationTransaction(async (tx, apply) =>
+      addToTrip(tx, apply, await lockTrip(tx, otherTrip.id), {
+        userId: member.id,
+        method: 'OFFICER',
+        actorId: officer.id,
+        opId: officerOpId,
+      }),
+    );
 
-    for (const [userId, tripId] of [
-      [other.id, trip.id],
-      [member.id, otherTrip.id],
+    for (const [userId, tripId, reusedOpId] of [
+      [other.id, trip.id, opId], // another member
+      [member.id, otherTrip.id, opId], // another trip
+      [member.id, otherTrip.id, officerOpId], // the officer's add, not a self-registration
     ] as const) {
-      const res = await register(userId, tripId, opId);
+      const res = await register(userId, tripId, reusedOpId);
       expect(res.status).toBe(409);
       expect(res.body.error.details.reason).toBe('PARTICIPATION_NOT_ALLOWED');
     }
-    expect(await prisma.tripMembership.count()).toBe(1);
-    expect(await prisma.charge.count()).toBe(1);
+    expect(await prisma.tripMembership.count()).toBe(2);
+    expect(await prisma.charge.count()).toBe(2);
   });
 
-  it('does not charge again when an add is retried with an opId applied before a cancellation', async () => {
+  it('answers a retry after a cancellation with the current state and charges nothing', async () => {
     const trip = await openTrip({ costCents: 5000 });
     const member = await createUser();
     const opId = randomUUID();
     await register(member.id, trip.id, opId);
-    // The member cancels (SS-163): the spot is released and the charge voided.
+    // The member cancels on another device (SS-163): the spot is released and the charge voided.
     await prisma.tripMembership.updateMany({ data: { participation: 'NOT_REGISTERED' } });
     await prisma.charge.updateMany({ data: { status: 'VOID' } });
 
+    // The phone retries the original request: nothing new is created and nothing is claimed.
+    const retry = await register(member.id, trip.id, opId);
+    expect(retry.status).toBe(200);
+    expect(retry.body.data).toMatchObject({
+      alreadyRegistered: false,
+      registration: { participation: 'NOT_REGISTERED', chargeStatus: 'VOID' },
+    });
+
+    // Roster add and waitlist convert call addToTrip directly: the same retry charges nothing.
     const added = await participationTransaction(async (tx, apply) =>
       addToTrip(tx, apply, await lockTrip(tx, trip.id), {
         userId: member.id,
@@ -119,6 +140,7 @@ describe('POST /trips/:tripId/registration', () => {
     );
 
     expect(added).toBe(false);
+    expect(await prisma.charge.count()).toBe(1);
     expect(await prisma.charge.count({ where: { status: { not: 'VOID' } } })).toBe(0);
     expect(await prisma.attendanceEvent.count()).toBe(1);
   });

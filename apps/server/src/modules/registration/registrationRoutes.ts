@@ -44,6 +44,9 @@ registrationRouter.post(
     const { opId } = registerRequestSchema.parse(req.body);
     const result = await registerSelf(req.auth!.userId, tripId, opId);
     const body: ApiSuccess<RegisterResult> = { ok: true, data: result };
-    res.status(result.alreadyRegistered ? 200 : 201).json(body);
+    // 201 only when this request registered the member. A retry created nothing and answers 200,
+    // including one whose registration was cancelled since (alreadyRegistered is false then).
+    const created = !result.alreadyRegistered && result.registration.participation === 'REGISTERED';
+    res.status(created ? 201 : 200).json(body);
   },
 );
