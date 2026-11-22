@@ -167,3 +167,6 @@ Thumbs.db
 .idea/
 .vscode/
 !.vscode/extensions.json
+# AWS CDK output (infra/)
+cdk.out/
+.cdk.staging/
