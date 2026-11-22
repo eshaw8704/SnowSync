@@ -1,4 +1,4 @@
-// Root ESLint configuration applies to packages/* and apps/server
+// Root ESLint configuration applies to packages/*, apps/server and infra
 // apps/mobile will have its own eslint.config.js and is ignored here.
 
 import js from '@eslint/js';
@@ -11,6 +11,7 @@ export default tseslint.config(
       '**/node_modules/**',
       '**/dist/**',
       '**/coverage/**',
+      '**/cdk.out/**',
       'apps/mobile/**',
       'apps/server/src/generated/**',
       'apps/server/prisma/migrations/**',

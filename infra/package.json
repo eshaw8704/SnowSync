@@ -1,0 +1,24 @@
+{
+  "name": "@snowsync/infra",
+  "version": "0.0.0",
+  "private": true,
+  "description": "SnowSync AWS infrastructure as code (AWS CDK): network, data, service and email stacks",
+  "type": "module",
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "synth": "cdk synth",
+    "diff": "cdk diff",
+    "deploy": "cdk deploy --all"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "2.275.0",
+    "constructs": "10.8.1"
+  },
+  "devDependencies": {
+    "aws-cdk": "2.1146.1",
+    "tsx": "^4.23.0",
+    "vitest": "^5.0.0"
+  }
+}
