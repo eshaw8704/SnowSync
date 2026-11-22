@@ -11,6 +11,15 @@ export const REQUEST_ID_HEADER = 'x-request-id';
  */
 export const requestLogger = pinoHttp({
   logger,
+  serializers: {
+    // Query strings can carry personal data (member search by name or email), so the logged
+    // request keeps only the path. Receives the standard serialized request.
+    req: (req: { url?: string; query?: unknown }) => {
+      req.url = req.url?.split('?')[0];
+      delete req.query;
+      return req;
+    },
+  },
   genReqId: (req, res) => {
     const incoming = req.headers[REQUEST_ID_HEADER];
     const id = typeof incoming === 'string' && incoming.length > 0 ? incoming : randomUUID();

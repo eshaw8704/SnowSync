@@ -10,12 +10,19 @@ const server = app.listen(env.PORT, '0.0.0.0', () => {
   startScheduler();
 });
 
-/** Stops accepting connections, then exits. */
+let shuttingDown = false;
+
+/**
+ * Stops accepting connections, lets in-flight requests and a running Scheduler tick finish, then
+ * closes the database and exits. A second signal (SIGTERM then Ctrl+C) is ignored.
+ */
 function shutdown(signal: NodeJS.Signals): void {
+  if (shuttingDown) return;
+  shuttingDown = true;
   logger.info({ signal }, 'Shutting down');
-  stopScheduler();
+  const schedulerStopped = stopScheduler();
   server.close(() => {
-    void disconnectDatabase().finally(() => process.exit(0));
+    void schedulerStopped.then(() => disconnectDatabase()).finally(() => process.exit(0));
   });
 }
 
