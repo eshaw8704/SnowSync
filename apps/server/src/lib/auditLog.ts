@@ -1,7 +1,7 @@
 import type { Prisma } from '../generated/prisma/client';
 import { prisma } from '../db/prisma';
 
-/** Audit actions used so far. Later sprints add more. */
+//Audit actions used so far. Later sprints add more
 export type AuditAction =
   | 'MEMBERSHIP_APPROVED'
   | 'MEMBERSHIP_REJECTED'
@@ -10,9 +10,11 @@ export type AuditAction =
   | 'ROLE_PERMISSIONS_UPDATED'
   | 'TRIP_CREATED'
   | 'TRIP_UPDATED'
-  | 'TRIP_DELETED';
+  | 'TRIP_DELETED'
+  | 'ROSTER_MEMBER_ADDED'
+  | 'ROSTER_MEMBER_REMOVED';
 
-/** One audit entry. `before` and `after` are JSON snapshots of what changed. */
+//One audit entry. `before` and `after` are JSON snapshots of what changed
 export interface AuditEntry {
   actorId: string;
   action: AuditAction;
@@ -23,10 +25,8 @@ export interface AuditEntry {
   after?: Prisma.InputJsonValue;
 }
 
-/**
- * Writes one audit row. Pass `tx` to write it inside the same transaction as the change,
- * so a change is never saved without its audit record.
- */
+//Writes one audit row. Pass `tx` to write it inside the same transaction as the change,
+//so a change is never saved without its audit record
 export async function recordAudit(
   entry: AuditEntry,
   tx: Prisma.TransactionClient = prisma,
