@@ -1,16 +1,19 @@
+import { randomUUID } from 'node:crypto';
 import {
   holdsSpot,
   RegistrationErrorReason,
   SPOT_HOLDING_STATES,
   type AttendanceMethod,
+  type CancelRegistrationResult,
   type MyRegistration,
   type RegisterResult,
+  type TripState,
 } from '@snowsync/shared';
 import { prisma } from '../../db/prisma';
 import type { Prisma } from '../../generated/prisma/client';
 import { HttpError } from '../../lib/httpError';
 import { isUniqueViolation } from '../../lib/prismaErrors';
-import { createTripCharge, latestTripCharge } from '../charges/chargeService';
+import { createTripCharge, latestTripCharge, releaseTripCharge } from '../charges/chargeService';
 import {
   participationTransaction,
   type ApplyParticipationChange,
@@ -266,4 +269,63 @@ export async function registerSelf(
     }
     throw error;
   }
+}
+
+/**
+ * Trip states in which members may cancel their own registration (SS-31). The self-cancel cutoff
+ * is an open decision in the System Map (§06): change it here and nowhere else.
+ */
+export const SELF_CANCEL_TRIP_STATES: readonly TripState[] = ['OPEN_FOR_REGISTRATION'];
+
+/**
+ * DELETE /trips/:tripId/registration (SS-31). Only while the member is REGISTERED and the trip is
+ * in {@link SELF_CANCEL_TRIP_STATES}. Releases the spot at once, voids an unpaid charge and sends a
+ * paid one to refund review; nothing is refunded automatically. Cancelling when not registered
+ * changes nothing and returns `cancelled: false`.
+ */
+export async function cancelOwnRegistration(
+  userId: string,
+  tripId: string,
+): Promise<CancelRegistrationResult> {
+  return participationTransaction(async (tx, apply) => {
+    const trip = await lockTrip(tx, tripId);
+    const existing = await tx.tripMembership.findUnique({
+      where: { tripId_userId: { tripId, userId } },
+      select: { participation: true },
+    });
+    const participation = existing?.participation ?? 'NOT_REGISTERED';
+    if (participation === 'NOT_REGISTERED') {
+      return { registration: await loadMyRegistration(tx, tripId, userId), cancelled: false };
+    }
+    if (participation !== 'REGISTERED' || !SELF_CANCEL_TRIP_STATES.includes(trip.state)) {
+      throw new HttpError(
+        'CONFLICT',
+        'You can only cancel while registration is open and before you check in.',
+        {
+          reason: RegistrationErrorReason.CANCEL_NOT_ALLOWED,
+          participation,
+          tripState: trip.state,
+        },
+      );
+    }
+    const change = await apply({
+      tripId,
+      userId,
+      from: 'REGISTERED',
+      to: 'NOT_REGISTERED',
+      method: 'SELF',
+      actorId: userId,
+      opId: randomUUID(),
+      set: { cancelledAt: new Date() },
+    });
+    // The trip lock should make this unreachable, but if the member's participation changed between
+    // the read above and this update (say, an officer check-in), nothing was cancelled. Leave the
+    // charge alone so a member who is still on the trip keeps it, and report the current state.
+    // Same check as addToTrip.
+    if (!change.applied || change.replayed) {
+      return { registration: await loadMyRegistration(tx, tripId, userId), cancelled: false };
+    }
+    await releaseTripCharge(tx, userId, tripId);
+    return { registration: await loadMyRegistration(tx, tripId, userId), cancelled: true };
+  });
 }

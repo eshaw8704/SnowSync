@@ -1,6 +1,7 @@
 import {
   registerRequestSchema,
   type ApiSuccess,
+  type CancelRegistrationResult,
   type MyRegistration,
   type RegisterResult,
 } from '@snowsync/shared';
@@ -9,10 +10,10 @@ import { prisma } from '../../db/prisma';
 import { HttpError } from '../../lib/httpError';
 import { parseTripId } from '../../lib/routeParams';
 import { requireApprovedMember, requireAuth } from '../../middleware/requireAuth';
-import { loadMyRegistration, registerSelf } from './registrationService';
+import { cancelOwnRegistration, loadMyRegistration, registerSelf } from './registrationService';
 
 /**
- * Member registration on /trips/:tripId/registration. Guards are listed on each
+ * Member registration on /trips/:tripId/registration (SS-28, SS-31). Guards are listed on each
  * route, never with router.use(), because other routers share the /trips prefix.
  */
 export const registrationRouter: Router = Router();
@@ -48,5 +49,19 @@ registrationRouter.post(
     // including one whose registration was cancelled since (alreadyRegistered is false then).
     const created = !result.alreadyRegistered && result.registration.participation === 'REGISTERED';
     res.status(created ? 201 : 200).json(body);
+  },
+);
+
+registrationRouter.delete(
+  '/:tripId/registration',
+  requireAuth,
+  requireApprovedMember,
+  async (req, res) => {
+    const tripId = parseTripId(req.params.tripId);
+    const body: ApiSuccess<CancelRegistrationResult> = {
+      ok: true,
+      data: await cancelOwnRegistration(req.auth!.userId, tripId),
+    };
+    res.json(body);
   },
 );
