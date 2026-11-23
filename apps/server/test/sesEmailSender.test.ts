@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { parseEnv } from '../src/config/env';
 import { chooseEmailSender, consoleEmailSender } from '../src/lib/email/emailSender';
 import { createSesEmailSender } from '../src/lib/email/sesEmailSender';
+import { logger } from '../src/lib/logger';
 
 const BASE = {
   NODE_ENV: 'test',
@@ -51,13 +52,19 @@ describe('Amazon SES email', () => {
 
     const prod = parseEnv({ ...BASE, NODE_ENV: 'production', EMAIL_TRANSPORT: 'ses' });
     expect(chooseEmailSender(prod)).not.toBe(consoleEmailSender);
+    expect(chooseEmailSender(prod)).not.toBe(
+      chooseEmailSender(parseEnv({ ...BASE, NODE_ENV: 'production' })),
+    );
   });
 
   it('refuses to send in production without SES instead of logging real emails', async () => {
+    const info = vi.spyOn(logger, 'info');
     const prod = parseEnv({ ...BASE, NODE_ENV: 'production' });
     await expect(
       chooseEmailSender(prod).send({ to: 'x@csus.edu', subject: 's', text: 't' }),
     ).rejects.toThrow('not configured');
+    expect(info).not.toHaveBeenCalled();
+    info.mockRestore();
   });
 
   it('rejects an unknown transport', () => {
