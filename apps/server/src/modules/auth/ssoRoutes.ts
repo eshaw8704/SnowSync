@@ -1,6 +1,11 @@
 import { ssoExchangeRequestSchema, type ApiSuccess, type AuthSession } from '@snowsync/shared';
 import { Router } from 'express';
-import { buildAuthorizationUrl, completeSsoCallback, exchangeSsoCode } from './ssoService';
+import {
+  buildAuthorizationUrl,
+  completeSsoCallback,
+  exchangeSsoCode,
+  requireSsoConfig,
+} from './ssoService';
 
 /**
  * Sac State SSO on /auth/sso/* (SS-38). The phone opens /start in a browser session; the
@@ -18,6 +23,8 @@ ssoRouter.get('/sso/callback', async (req, res) => {
 });
 
 ssoRouter.post('/sso/exchange', async (req, res) => {
+  // 404 while SSO is off, even for a malformed body.
+  requireSsoConfig();
   const { code } = ssoExchangeRequestSchema.parse(req.body);
   const body: ApiSuccess<AuthSession> = { ok: true, data: await exchangeSsoCode(code) };
   res.json(body);

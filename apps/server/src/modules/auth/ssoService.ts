@@ -183,6 +183,7 @@ async function exchangeCodeForClaims(
   const { payload } = await jwtVerify(tokens.id_token, provider.jwks, {
     issuer: provider.issuer,
     audience: current.clientId,
+    requiredClaims: ['exp'],
   });
   if (payload.nonce !== saved.nonce || typeof payload.sub !== 'string') {
     throw new Error('ID token nonce or subject did not match');

@@ -162,5 +162,6 @@ describe('Sac State SSO', () => {
       .send({ code: 'a'.repeat(43) });
     expect(exchange.status).toBe(404);
     expect(exchange.body.error.details.reason).toBe('SSO_DISABLED');
+    expect((await request(app).post('/auth/sso/exchange').send({})).status).toBe(404);
   });
 });
