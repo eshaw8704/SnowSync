@@ -12,6 +12,8 @@ export const logger = pino({
       '*.passwordHash',
       '*.token',
       '*.refreshToken',
+      // Redirects can carry one-time credentials (the SSO callback's ?code=…).
+      'res.headers.location',
     ],
     censor: '[redacted]',
   },
