@@ -16,10 +16,11 @@ async function registeredMember(capacity = 24) {
     state: 'OPEN_FOR_REGISTRATION',
     capacity,
   });
-  await request(createApp())
+  const registered = await request(createApp())
     .post(`/trips/${trip.id}/registration`)
     .set('Authorization', await bearerFor(member.id))
     .send({ opId: randomUUID() });
+  expect(registered.status).toBe(201);
   return { officer, member, trip };
 }
 
@@ -60,7 +61,7 @@ describe('DELETE /trips/:tripId/registration', () => {
 
   it('frees the spot for someone else and lets the member register again', async () => {
     const { member, trip } = await registeredMember(1);
-    await cancel(member.id, trip.id);
+    expect((await cancel(member.id, trip.id)).body.data.cancelled).toBe(true);
     const other = await createUser();
     const taken = await request(createApp())
       .post(`/trips/${trip.id}/registration`)
@@ -68,7 +69,7 @@ describe('DELETE /trips/:tripId/registration', () => {
       .send({ opId: randomUUID() });
     expect(taken.status).toBe(201);
 
-    await cancel(other.id, trip.id);
+    expect((await cancel(other.id, trip.id)).body.data.cancelled).toBe(true);
     const back = await request(createApp())
       .post(`/trips/${trip.id}/registration`)
       .set('Authorization', await bearerFor(member.id))
@@ -89,7 +90,7 @@ describe('DELETE /trips/:tripId/registration', () => {
     expect(await prisma.attendanceEvent.count({ where: { toState: 'NOT_REGISTERED' } })).toBe(1);
   });
 
-  it('refuses once check-in has started or the member is checked in', async () => {
+  it('refuses once check-in has started', async () => {
     const { member, trip } = await registeredMember();
     await prisma.trip.update({ where: { id: trip.id }, data: { state: 'CHECK_IN' } });
     const res = await cancel(member.id, trip.id);
@@ -101,6 +102,19 @@ describe('DELETE /trips/:tripId/registration', () => {
     await expect(prisma.tripMembership.findFirstOrThrow()).resolves.toMatchObject({
       participation: 'REGISTERED',
     });
+  });
+
+  it('refuses a checked-in member even while the trip is still open', async () => {
+    const { member, trip } = await registeredMember();
+    await prisma.tripMembership.updateMany({ data: { participation: 'CHECKED_IN' } });
+    const res = await cancel(member.id, trip.id);
+    expect(res.status).toBe(409);
+    expect(res.body.error.details).toMatchObject({
+      reason: 'CANCEL_NOT_ALLOWED',
+      participation: 'CHECKED_IN',
+      tripState: 'OPEN_FOR_REGISTRATION',
+    });
+    await expect(prisma.charge.findFirstOrThrow()).resolves.toMatchObject({ status: 'UNPAID' });
   });
 
   it('answers 404 for a trip that does not exist', async () => {
