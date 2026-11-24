@@ -6,6 +6,7 @@ import * as ecs from 'aws-cdk-lib/aws-ecs';
 import * as ecsPatterns from 'aws-cdk-lib/aws-ecs-patterns';
 import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 import * as logs from 'aws-cdk-lib/aws-logs';
+import type * as ses from 'aws-cdk-lib/aws-ses';
 import type { Construct } from 'constructs';
 import type { SnowSyncConfig } from './config';
 import type { DataStack } from './dataStack';
@@ -14,15 +15,15 @@ export interface ServiceStackProps extends StackProps {
   vpc: ec2.IVpc;
   data: DataStack;
   config: SnowSyncConfig;
+  /* The SES identity the server sends from. */
+  emailIdentity: ses.IEmailIdentity;
 }
 
 /* The container's name in the task definition; the deploy workflow overrides its command. */
 export const CONTAINER_NAME = 'server';
 
-/**
- * ECR repository and 2+ Fargate tasks in private subnets behind an HTTPS-only load balancer.
- * Secrets come from Secrets Manager at start; nothing secret is in the image.
- */
+/* ECR repository and 2+ Fargate tasks in private subnets behind an HTTPS-only load balancer.
+ * Secrets come from Secrets Manager at start; nothing secret is in the image. */
 export class ServiceStack extends Stack {
   readonly repository: ecr.Repository;
   readonly service: ecsPatterns.ApplicationLoadBalancedFargateService;
@@ -94,6 +95,9 @@ export class ServiceStack extends Stack {
           DB_PORT: data.database.dbInstanceEndpointPort,
           DB_NAME: 'snowsync',
           REDIS_URL: `rediss://${data.redisEndpoint}:${data.redisPort}`,
+          EMAIL_TRANSPORT: 'ses',
+          EMAIL_FROM: config.emailFrom,
+          AWS_REGION: this.region,
         },
         secrets: {
           DB_USERNAME: ecs.Secret.fromSecretsManager(databaseSecret, 'username'),
@@ -102,6 +106,8 @@ export class ServiceStack extends Stack {
         },
       },
     });
+
+    props.emailIdentity.grantSendEmail(this.service.taskDefinition.taskRole);
 
     this.service.targetGroup.configureHealthCheck({
       path: '/health',

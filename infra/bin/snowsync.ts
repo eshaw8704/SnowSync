@@ -1,6 +1,7 @@
 import { App } from 'aws-cdk-lib';
 import { readConfig } from '../lib/config';
 import { DataStack } from '../lib/dataStack';
+import { EmailStack } from '../lib/emailStack';
 import { NetworkStack } from '../lib/networkStack';
 import { ServiceStack } from '../lib/serviceStack';
 
@@ -13,11 +14,13 @@ export function buildApp(app: App = new App()): App {
   };
   const network = new NetworkStack(app, 'SnowSyncNetwork', { env });
   const data = new DataStack(app, 'SnowSyncData', { env, vpc: network.vpc });
+  const email = new EmailStack(app, 'SnowSyncEmail', { env, config });
   new ServiceStack(app, 'SnowSyncService', {
     env,
     vpc: network.vpc,
     data,
     config,
+    emailIdentity: email.identity,
   });
   return app;
 }
