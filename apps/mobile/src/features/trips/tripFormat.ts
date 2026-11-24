@@ -17,6 +17,11 @@ export function formatTripDate(iso: string, timeZone: string): string {
   return format(iso, timeZone, { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
+/** "Feb 6" (Figma registration screens: "Heavenly · Jan 30 · $50") */
+export function formatShortDate(iso: string, timeZone: string): string {
+  return format(iso, timeZone, { month: 'short', day: 'numeric' });
+}
+
 /** "Sat, Feb 6, 2027" */
 export function formatTripDateWithYear(iso: string, timeZone: string): string {
   return format(iso, timeZone, {

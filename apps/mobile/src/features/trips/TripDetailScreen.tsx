@@ -12,6 +12,7 @@ import { Screen } from '../../components/Screen';
 import { Text } from '../../components/Text';
 import { TripStateBadge } from '../../components/TripStateBadge';
 import { selectHasPermission, useAuthStore } from '../../state/authStore';
+import { RegistrationPanel } from '../registration/RegistrationPanel';
 import { spacing } from '../../theme';
 import {
   formatCost,
@@ -38,8 +39,8 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-//Trip detail (SS-148, Figma catalog 08). The trip phase and my own status are shown side by side never merged
-//The Register button arrives in Sprint 4: its place is the marked slot below.
+//Trip detail (SS-148, Figma catalog 08). The trip phase and my own status are shown side by side never merged.
+//Sprint 4: my registration, payment and check-in live in the RegistrationPanel near the bottom.
 export function TripDetailScreen() {
   const { tripId } = useLocalSearchParams<{ tripId: string }>();
   const canManage = useAuthStore(selectHasPermission('MANAGE_TRIPS'));
@@ -131,7 +132,10 @@ export function TripDetailScreen() {
         </Text>
         <View style={styles.badges}>
           <TripStateBadge state={trip.state} />
-          <ParticipationBadge participation={trip.myParticipation} />
+          {/* Nobody can register for a draft, so a "Not registered" badge there means nothing. */}
+          {trip.state !== 'CREATED' ? (
+            <ParticipationBadge participation={trip.myParticipation} />
+          ) : null}
         </View>
       </View>
       {about ? (
@@ -173,12 +177,7 @@ export function TripDetailScreen() {
           </Text>
         ))}
       </Section>
-      {/* SPRINT 4 SLOT: the Register / Cancel registration button (SS-35) goes here. */}
-      <View testID="register-slot">
-        <Text variant="caption" color="textMuted">
-          Registration from the app arrives in the next update.
-        </Text>
-      </View>
+      <RegistrationPanel trip={trip} />
       {canManage ? (
         <Button
           label="Manage trip"

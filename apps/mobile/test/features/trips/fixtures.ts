@@ -1,4 +1,4 @@
-import type { TripDetail, TripSummary } from '@snowsync/shared';
+import type { MyRegistration, TripDetail, TripSummary } from '@snowsync/shared';
 
 //An open Heavenly trip the viewer has not registered for (Figma catalog 08, Available).
 export const HEAVENLY: TripSummary = {
@@ -27,4 +27,17 @@ export const HEAVENLY_DETAIL: TripDetail = {
   exitStartsAt: '2027-01-31T00:00:00.000Z',
   geofence: { latitude: 38.9353, longitude: -119.94, radiusMeters: 500, label: 'base lodge' },
   officers: [{ id: 'o1', displayName: 'Olivia Officer', role: 'OFFICER' }],
+};
+
+//GET /trips/:id/registration before registering.
+export const MY_REGISTRATION: MyRegistration = {
+  tripId: 'trip-heavenly',
+  participation: 'NOT_REGISTERED',
+  chargeStatus: null,
+  chargeAmountCents: null,
+  waitlisted: false,
+  checkedInAt: null,
+  checkInMethod: null,
+  checkedInByName: null,
+  lateMinutes: null,
 };
