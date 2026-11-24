@@ -10,10 +10,16 @@ export interface SesClientLike {
 /* Production sender: delivers through Amazon SES. Credentials come from the ECS task role. */
 export function createSesEmailSender(
   options: { from: string; region: string },
-  // A stalled SES call fails after 5 s instead of holding the request open.
+  // A stalled SES call fails after about 5 s instead of holding the request open. No retries,
+  // so an email SES may have accepted is never sent twice.
   client: SesClientLike = new SESv2Client({
     region: options.region,
-    requestHandler: { connectionTimeout: 3_000, requestTimeout: 5_000 },
+    maxAttempts: 1,
+    requestHandler: {
+      connectionTimeout: 3_000,
+      requestTimeout: 5_000,
+      throwOnRequestTimeout: true,
+    },
   }),
 ): EmailSender {
   return {
