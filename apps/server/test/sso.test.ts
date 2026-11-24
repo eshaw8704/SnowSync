@@ -32,9 +32,8 @@ describe('Sac State SSO', () => {
     await idp.stop();
   });
 
-  beforeEach(async () => {
-    await resetDatabase();
-    idp.claims = { sub: 'sac-123', email: 'riley@csus.edu', name: 'Riley Patel' };
+  /** Points the server at the fake provider (and clears its cached discovery). */
+  function useFakeProvider(): void {
     configureSso({
       issuerUrl: idp.issuer,
       clientId: CLIENT_ID,
@@ -42,6 +41,13 @@ describe('Sac State SSO', () => {
       callbackUrl: 'http://localhost:3000/auth/sso/callback',
       appRedirectUrl: 'snowsync://sso-complete',
     });
+  }
+
+  beforeEach(async () => {
+    await resetDatabase();
+    idp.claims = { sub: 'sac-123', email: 'riley@csus.edu', name: 'Riley Patel' };
+    idp.advertisedIssuer = null;
+    useFakeProvider();
   });
 
   it('sends the browser to Sac State with PKCE, a nonce and an encrypted state', async () => {
@@ -56,6 +62,13 @@ describe('Sac State SSO', () => {
       code_challenge_method: 'S256',
     });
     expect(url.searchParams.get('state')!.split('.')).toHaveLength(5);
+
+    // A discovery document advertising a different issuer is refused.
+    idp.advertisedIssuer = 'https://not-sac-state.example';
+    useFakeProvider();
+    const mismatched = await request(createApp()).get('/auth/sso/start');
+    expect(mismatched.status).toBe(500);
+    expect(mismatched.headers.location).toBeUndefined();
   });
 
   it('creates a PENDING_APPROVAL member on first sign-in and exchanges the code once', async () => {
@@ -128,6 +141,19 @@ describe('Sac State SSO', () => {
       .get('/auth/sso/callback')
       .query({ code: 'good-code', state: 'not-a-real-state' });
     expect(res.headers.location).toBe('snowsync://sso-complete?error=FAILED');
+
+    // A token issued to another client (azp), or shared with others without azp, is refused.
+    for (const extra of [
+      { aud: [CLIENT_ID, 'other-app'], azp: 'other-app' },
+      { aud: [CLIENT_ID, 'other-app'] },
+      { azp: 'other-app' },
+    ]) {
+      idp.claims = { sub: 'sac-123', email: 'riley@csus.edu', ...extra };
+      expect((await signInAtSacState()).searchParams.get('error')).toBe('FAILED');
+    }
+    idp.claims = { sub: 'sac-123', email: 'riley@csus.edu', aud: [CLIENT_ID, 'other-app'] };
+    idp.claims.azp = CLIENT_ID;
+    expect((await signInAtSacState()).searchParams.get('code')).toEqual(expect.any(String));
   });
 
   it('refuses an expired code', async () => {
@@ -150,6 +176,22 @@ describe('Sac State SSO', () => {
     expect(parsed.SSO_ISSUER_URL).toBeUndefined();
     expect(parsed.SSO_CLIENT_ID).toBeUndefined();
     expect(parsed.SSO_APP_REDIRECT_URL).toBe('snowsync://sso-complete');
+
+    // Production requires https for the issuer and callback; other environments allow http.
+    const http = {
+      PORT: '3000',
+      LOG_LEVEL: 'silent',
+      DATABASE_URL: 'postgresql://u:p@localhost:5432/db',
+      JWT_ACCESS_SECRET: 'x'.repeat(32),
+      SSO_ISSUER_URL: 'http://idp.example',
+      SSO_CALLBACK_URL: 'http://api.example/auth/sso/callback',
+    };
+    expect(() => parseEnv({ ...http, NODE_ENV: 'production' })).toThrow(
+      /SSO_ISSUER_URL: Must use https[\s\S]*SSO_CALLBACK_URL: Must use https/,
+    );
+    expect(parseEnv({ ...http, NODE_ENV: 'development' }).SSO_ISSUER_URL).toBe(
+      'http://idp.example',
+    );
   });
 
   it('answers 404 everywhere while SSO is not configured', async () => {

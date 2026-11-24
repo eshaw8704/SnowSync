@@ -9,6 +9,9 @@ export interface FakeClaims {
   email?: string;
   email_verified?: boolean;
   name?: string;
+  /** Audiences for the ID token. Defaults to just the client id. */
+  aud?: string[];
+  azp?: string;
 }
 
 /**
@@ -20,6 +23,8 @@ export class FakeIdentityProvider {
   /** The nonce and PKCE challenge from the last authorization URL the server built. */
   nonce = '';
   challenge = '';
+  /** Issuer the discovery document advertises. Null advertises the real one. */
+  advertisedIssuer: string | null = null;
   private server: Server | null = null;
   private privateKey: CryptoKey | null = null;
   private jwk: JWK | null = null;
@@ -35,7 +40,7 @@ export class FakeIdentityProvider {
         res.setHeader('Content-Type', 'application/json');
         res.end(
           JSON.stringify({
-            issuer: this.issuer,
+            issuer: this.advertisedIssuer ?? this.issuer,
             authorization_endpoint: `${this.issuer}/authorize`,
             token_endpoint: `${this.issuer}/token`,
             jwks_uri: `${this.issuer}/jwks`,
@@ -60,10 +65,11 @@ export class FakeIdentityProvider {
             res.end(JSON.stringify({ error: 'invalid_grant' }));
             return;
           }
-          void new SignJWT({ ...this.claims, nonce: this.nonce })
+          const { aud, ...claims } = this.claims;
+          void new SignJWT({ ...claims, nonce: this.nonce })
             .setProtectedHeader({ alg: 'RS256', kid: 'test' })
             .setIssuer(this.issuer)
-            .setAudience(clientId)
+            .setAudience(aud ?? clientId)
             .setIssuedAt()
             .setExpirationTime('5m')
             .sign(this.privateKey!)

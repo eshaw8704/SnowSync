@@ -93,6 +93,22 @@ async function discover(current: SsoConfig): Promise<Discovery> {
     token_endpoint: string;
     jwks_uri: string;
   };
+  // OpenID Connect Discovery: the advertised issuer must be the one we configured.
+  const withoutSlash = (value: unknown) => String(value).replace(/\/$/, '');
+  if (withoutSlash(document.issuer) !== withoutSlash(current.issuerUrl)) {
+    throw new Error('OpenID discovery issuer does not match SSO_ISSUER_URL');
+  }
+  if (env.NODE_ENV === 'production') {
+    for (const endpoint of [
+      document.authorization_endpoint,
+      document.token_endpoint,
+      document.jwks_uri,
+    ]) {
+      if (!String(endpoint).startsWith('https://')) {
+        throw new Error('OpenID discovery returned an endpoint that is not https');
+      }
+    }
+  }
   discovery = {
     issuer: document.issuer,
     authorizationEndpoint: document.authorization_endpoint,
@@ -187,6 +203,11 @@ async function exchangeCodeForClaims(
   });
   if (payload.nonce !== saved.nonce || typeof payload.sub !== 'string') {
     throw new Error('ID token nonce or subject did not match');
+  }
+  // With several audiences (or any azp), the token must have been issued to this client.
+  const audiences = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+  if ((audiences.length > 1 || payload.azp !== undefined) && payload.azp !== current.clientId) {
+    throw new Error('ID token azp did not match this client');
   }
   const email = typeof payload.email === 'string' ? payload.email.trim().toLowerCase() : '';
   // Sac State is authoritative for its own domain, so a csus.edu address counts as verified unless
