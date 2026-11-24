@@ -15,8 +15,12 @@ const envSchema = z.object({
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).default(30),
   /** Base of the link in password-reset emails; the token is added as ?token=… */
   PASSWORD_RESET_URL: z.url().default('snowsync://reset-password'),
-  /** Sender shown on SnowSync emails. Amazon SES replaces the console sender in Sprint 4. */
+  /** Sender on SnowSync emails. In production, an address on the SES-verified domain. */
   EMAIL_FROM: z.string().min(3).default('SnowSync <no-reply@snowsync.local>'),
+  /** `console` logs emails (development); `ses` sends through Amazon SES. */
+  EMAIL_TRANSPORT: z.enum(['console', 'ses']).default('console'),
+  /** AWS region for SES. Credentials come from the ECS task role, never from .env. */
+  AWS_REGION: z.string().min(1).default('us-west-2'),
   /** How often the trip lifecycle Scheduler looks for due transitions (System Map §05). */
   SCHEDULER_INTERVAL_SECONDS: z.coerce.number().int().min(5).default(30),
 });

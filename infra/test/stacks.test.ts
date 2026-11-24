@@ -2,6 +2,7 @@ import { App, type Stack } from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
 import { describe, expect, it } from 'vitest';
 import { buildApp } from '../bin/snowsync';
+import { sendingDomain } from '../lib/emailStack';
 
 const CONTEXT = {
   certificateArn: 'arn:aws:acm:us-west-2:111111111111:certificate/test',
@@ -17,6 +18,7 @@ function synth() {
     network: template('SnowSyncNetwork'),
     data: template('SnowSyncData'),
     service: template('SnowSyncService'),
+    email: template('SnowSyncEmail'),
   };
 }
 
@@ -95,6 +97,23 @@ describe('SnowSync AWS stacks', () => {
     );
     expect(secretNames.sort()).toEqual(['DB_PASSWORD', 'DB_USERNAME', 'JWT_ACCESS_SECRET']);
     expect(JSON.stringify(taskDefinition)).not.toMatch(/"Name":"DATABASE_URL"/);
+  });
+
+  it('verifies the sending domain with DKIM and lets only the server send', () => {
+    expect(sendingDomain('SnowSync <no-reply@snowsync.test>')).toBe('snowsync.test');
+    stacks.email.hasResourceProperties('AWS::SES::EmailIdentity', {
+      EmailIdentity: 'snowsync.test',
+      DkimAttributes: { SigningEnabled: true },
+    });
+    stacks.service.hasResourceProperties('AWS::IAM::Policy', {
+      PolicyDocument: {
+        Statement: Match.arrayWith([
+          Match.objectLike({ Action: Match.arrayWith(['ses:SendEmail']) }),
+        ]),
+      },
+    });
+    const taskDefinition = JSON.stringify(stacks.service.findResources('AWS::ECS::TaskDefinition'));
+    expect(taskDefinition).toContain('"Name":"EMAIL_TRANSPORT","Value":"ses"');
   });
 
   it('refuses to synthesize without the domain and certificate', () => {
