@@ -37,6 +37,15 @@ describe('TripManagementScreen', () => {
     expect(router.push).toHaveBeenCalledWith('/trip/edit/trip-heavenly');
   });
 
+  it('opens the roster and hides my badge on a draft', async () => {
+    signInAs({ role: 'OFFICER', permissions: ['MANAGE_TRIPS', 'MANAGE_ROSTER'] });
+    jest.mocked(getTrip).mockResolvedValue({ ...HEAVENLY_DETAIL, state: 'CREATED' });
+    render(<TripManagementScreen />);
+    fireEvent.press(await screen.findByRole('button', { name: 'View roster' }));
+    expect(router.push).toHaveBeenCalledWith('/trip/roster/trip-heavenly');
+    expect(screen.queryByLabelText('YOU: Not registered')).toBeNull();
+  });
+
   it('does not offer editing once the trip is active', async () => {
     signInAs({ role: 'OFFICER', permissions: ['MANAGE_TRIPS'] });
     jest.mocked(getTrip).mockResolvedValue({ ...HEAVENLY_DETAIL, state: 'ACTIVE' });

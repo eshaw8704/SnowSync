@@ -66,6 +66,14 @@ describe('TripDetailScreen', () => {
     expect(router.push).toHaveBeenCalledWith('/trip/manage/trip-heavenly');
   });
 
+  it('offers officers with roster permission the roster', async () => {
+    signInAs({ role: 'OFFICER', permissions: ['MANAGE_ROSTER'] });
+    jest.mocked(getTrip).mockResolvedValue(HEAVENLY_DETAIL);
+    render(<TripDetailScreen />);
+    fireEvent.press(await screen.findByRole('button', { name: 'View roster' }));
+    expect(router.push).toHaveBeenCalledWith('/trip/roster/trip-heavenly');
+  });
+
   it('explains a trip that cannot be found', async () => {
     signInAs();
     jest
