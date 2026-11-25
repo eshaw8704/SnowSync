@@ -35,6 +35,7 @@ export function ResetPasswordScreen() {
           actionLabel="Request a new link"
           onAction={() => router.replace('/forgot-password')}
         />
+        <TextLink label="Back to sign in" href="/sign-in" />
       </Screen>
     );
   }

@@ -77,5 +77,7 @@ describe('password reset screens', () => {
     fireEvent.changeText(screen.getByLabelText('Confirm new password'), 'Brand-New-Pass-2027');
     fireEvent.press(screen.getByRole('button', { name: 'Reset password' }));
     expect(await screen.findByText('Link invalid or expired')).toBeTruthy();
+    fireEvent.press(screen.getByRole('link', { name: 'Back to sign in' }));
+    expect(await screen.findByText('Sign in screen')).toBeTruthy();
   });
 });

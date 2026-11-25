@@ -33,6 +33,11 @@ const SESSION = {
   refreshTokenExpiresAt: '2027-02-01T00:00:00.000Z',
 };
 
+const CODE_INVALID = new ApiClientError(
+  { code: 'UNAUTHORIZED', message: 'expired', details: { reason: 'SSO_CODE_INVALID' } },
+  401,
+);
+
 describe('Sac State SSO', () => {
   const originalFlag = process.env.EXPO_PUBLIC_SSO_ENABLED;
 
@@ -130,7 +135,7 @@ describe('Sac State SSO', () => {
 
     it('explains an expired code and leads back to sign in', async () => {
       mockParams = { code: 'old' };
-      jest.mocked(exchangeSsoCode).mockRejectedValue(new Error('401'));
+      jest.mocked(exchangeSsoCode).mockRejectedValue(CODE_INVALID);
       render(<SsoCompleteScreen />);
       expect(await screen.findByText(/expired or was already used/)).toBeTruthy();
       fireEvent.press(screen.getByRole('button', { name: 'Back' }));
@@ -157,7 +162,7 @@ describe('Sac State SSO', () => {
 
     it('trades a new code that arrives on the same screen', async () => {
       mockParams = { code: 'first' };
-      jest.mocked(exchangeSsoCode).mockRejectedValueOnce(new Error('401'));
+      jest.mocked(exchangeSsoCode).mockRejectedValueOnce(CODE_INVALID);
       const view = render(<SsoCompleteScreen />);
       expect(await screen.findByText(/expired or was already used/)).toBeTruthy();
       mockParams = { code: 'second' };
@@ -166,6 +171,40 @@ describe('Sac State SSO', () => {
       expect(screen.getByText('Completing sign in…')).toBeTruthy();
       await waitFor(() => expect(useAuthStore.getState().accessToken).toBe('a'));
       expect(exchangeSsoCode).toHaveBeenLastCalledWith('second');
+    });
+
+    it('explains a server failure without blaming the link', async () => {
+      mockParams = { code: 'outage' };
+      jest
+        .mocked(exchangeSsoCode)
+        .mockRejectedValue(new ApiClientError({ code: 'INTERNAL', message: 'boom' }, 500));
+      render(<SsoCompleteScreen />);
+      expect(await screen.findByText(/sign-in didn't finish/)).toBeTruthy();
+      expect(screen.queryByText(/expired or was already used/)).toBeNull();
+    });
+
+    it('asks the server again when a used link is reopened, instead of replaying the session', async () => {
+      mockParams = { code: 'reused' };
+      jest.mocked(exchangeSsoCode).mockResolvedValueOnce(SESSION);
+      const first = render(<SsoCompleteScreen />);
+      await waitFor(() => expect(useAuthStore.getState().accessToken).toBe('a'));
+      first.unmount();
+      resetAuthStore();
+      jest.mocked(exchangeSsoCode).mockRejectedValueOnce(CODE_INVALID);
+      render(<SsoCompleteScreen />);
+      expect(await screen.findByText(/expired or was already used/)).toBeTruthy();
+      expect(exchangeSsoCode).toHaveBeenCalledTimes(2);
+      expect(useAuthStore.getState().accessToken).toBeNull();
+    });
+
+    it('keeps the session when the screen closes before the exchange finishes', async () => {
+      mockParams = { code: 'closed-early' };
+      let finish: (session: typeof SESSION) => void = () => {};
+      jest.mocked(exchangeSsoCode).mockReturnValue(new Promise((resolve) => (finish = resolve)));
+      const view = render(<SsoCompleteScreen />);
+      view.unmount();
+      finish(SESSION);
+      await waitFor(() => expect(useAuthStore.getState().accessToken).toBe('a'));
     });
 
     it('explains a deactivated account without calling the server', async () => {

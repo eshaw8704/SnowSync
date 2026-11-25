@@ -15,29 +15,41 @@ import { exchangeSsoCode, parseSsoReturn, SSO_ERROR_MESSAGES } from './ssoApi';
 import { goBackFromSso } from './SsoRedirectScreen';
 
 /**
- * One exchange per code for the life of the app. A code works once, and on Android the same code
- * can open two completion screens (the deep link and the redirect screen), so every screen with
- * that code waits on the same request instead of sending its own.
+ * The exchange in flight for each code. A code works once, and on Android the same code can open
+ * two completion screens (the deep link and the redirect screen), so every screen with that code
+ * waits on the same request instead of sending its own. Each entry is removed once its request
+ * settles: a used link opened again later goes back to the server (which refuses it) instead of
+ * replaying a stored session, and no session is kept here.
  */
 const exchanges = new Map<string, Promise<AuthSession>>();
 
 function exchangeOnce(code: string): Promise<AuthSession> {
   let exchange = exchanges.get(code);
   if (!exchange) {
-    exchange = exchangeSsoCode(code);
+    exchange = exchangeSsoCode(code).finally(() => exchanges.delete(code));
     exchanges.set(code, exchange);
   }
   return exchange;
 }
 
-/** Why the exchange for a code failed: the network, or the server refused the code. */
-type ExchangeFailure = { code: string; reason: 'network' | 'refused' };
+/**
+ * Why the exchange for a code failed: the network, the server refusing the code (expired or used),
+ * or anything else the server answered (an outage, a rate limit).
+ */
+type ExchangeFailure = { code: string; reason: 'network' | 'refused' | 'failed' };
 
 const EXCHANGE_FAILURE_MESSAGES: Record<ExchangeFailure['reason'], string> = {
   network:
     "We couldn't reach SnowSync to finish signing you in. Check your connection and try Sac State sign-in again.",
   refused: 'That sign-in link expired or was already used. Try Sac State sign-in again.',
+  failed: SSO_ERROR_MESSAGES.FAILED,
 };
+
+function failureReason(error: unknown): ExchangeFailure['reason'] {
+  if (!(error instanceof ApiClientError)) return 'failed';
+  if (error.code === 'NETWORK_ERROR' || error.code === 'TIMEOUT') return 'network';
+  return error.details?.reason === 'SSO_CODE_INVALID' ? 'refused' : 'failed';
+}
 
 /**
  * "Completing sign in…" (SS-38, Figma catalog 03 page 14). Route /sso-complete?code=… — reached
@@ -55,19 +67,14 @@ export function SsoCompleteScreen() {
 
   useEffect(() => {
     if (!code) return;
-    // A new code (another deep link onto this same screen) gets its own exchange; a result that
-    // arrives after the code changed or the screen closed is ignored.
+    // A new code (another deep link onto this same screen) gets its own exchange. A session is
+    // always kept, even if the screen closed meanwhile: the server has already used up the code.
+    // Only a failure for a code that is no longer on screen is ignored.
     let current = true;
     exchangeOnce(code).then(
-      (session) => {
-        if (current) useAuthStore.getState().sessionStarted(session);
-      },
+      (session) => useAuthStore.getState().sessionStarted(session),
       (error: unknown) => {
-        if (!current) return;
-        const network =
-          error instanceof ApiClientError &&
-          (error.code === 'NETWORK_ERROR' || error.code === 'TIMEOUT');
-        setFailure({ code, reason: network ? 'network' : 'refused' });
+        if (current) setFailure({ code, reason: failureReason(error) });
       },
     );
     return () => {
