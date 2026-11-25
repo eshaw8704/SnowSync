@@ -1,4 +1,3 @@
-
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { router } from 'expo-router';
 import { RegistrationResultScreen } from '../../../src/features/registration/RegistrationResultScreen';
@@ -126,14 +125,17 @@ describe('RegistrationResultScreen', () => {
     expect(
       await screen.findByRole('header', { name: 'Unable to confirm registration' }),
     ).toBeTruthy();
-    expect(screen.queryByText('Your spot is confirmed. You are registered for this trip.')).toBeNull();
+    expect(
+      screen.queryByText('Your spot is confirmed. You are registered for this trip.'),
+    ).toBeNull();
     fireEvent.press(screen.getByRole('button', { name: 'View trip' }));
     expect(router.replace).toHaveBeenCalledWith('/trip/trip-heavenly');
   });
 
   it('allows retry when registration verification fails', async () => {
     mockOutcome = 'registered';
-    jest.mocked(getMyRegistration)
+    jest
+      .mocked(getMyRegistration)
       .mockRejectedValueOnce(new Error('Network error'))
       .mockResolvedValueOnce({
         ...MY_REGISTRATION,

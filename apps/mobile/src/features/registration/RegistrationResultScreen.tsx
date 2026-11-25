@@ -1,4 +1,3 @@
-
 import type { TripDetail } from '@snowsync/shared';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -69,7 +68,10 @@ function ResultContent({ trip, outcome }: { trip: TripDetail; outcome: Registrat
           title="Capacity"
           rows={[
             { label: 'Registered', value: String(trip.registeredCount) },
-            { label: 'Remaining', value: String(Math.max(0, trip.capacity - trip.registeredCount)) },
+            {
+              label: 'Remaining',
+              value: String(Math.max(0, trip.capacity - trip.registeredCount)),
+            },
           ]}
         />
         <DetailCard
@@ -134,13 +136,7 @@ function ResultContent({ trip, outcome }: { trip: TripDetail; outcome: Registrat
 }
 
 /** Checks the current member's registration before displaying a success result. */
-function VerifiedResult({
-  trip,
-  outcome,
-}: {
-  trip: TripDetail;
-  outcome: RegistrationOutcome;
-}) {
+function VerifiedResult({ trip, outcome }: { trip: TripDetail; outcome: RegistrationOutcome }) {
   const [verification, setVerification] = useState<VerificationState>('loading');
   const latestRequest = useRef(0);
 
@@ -167,12 +163,33 @@ function VerifiedResult({
   }, [trip.id]);
 
   useEffect(() => {
-    verify();
+    const requestId = ++latestRequest.current;
+
+    getMyRegistration(trip.id).then(
+      (registration) => {
+        if (requestId !== latestRequest.current) return;
+
+        const confirmed = ['REGISTERED', 'CHECKED_IN', 'ACTIVE'].includes(
+          registration.participation,
+        );
+
+        setVerification(confirmed ? 'confirmed' : 'unconfirmed');
+      },
+      () => {
+        if (requestId === latestRequest.current) {
+          setVerification('failed');
+        }
+      },
+    );
+
+    const requestRef = latestRequest;
 
     return () => {
-      latestRequest.current++;
+      if (requestRef.current === requestId) {
+        requestRef.current++;
+      }
     };
-  }, [verify]);
+  }, [trip.id]);
 
   if (verification === 'loading') {
     return (
@@ -184,9 +201,7 @@ function VerifiedResult({
 
   if (verification === 'failed') {
     return (
-      <StatusLayout
-        footer={<Button label="Try again" onPress={verify} />}
-      >
+      <StatusLayout footer={<Button label="Try again" onPress={verify} />}>
         <StatusHero
           chip="UNKNOWN"
           tone="amber"
