@@ -1,5 +1,6 @@
 import { fireEvent, screen } from '@testing-library/react-native';
 import { renderRouter } from 'expo-router/testing-library';
+import { Text } from 'react-native';
 import { ApiClientError } from '../../../src/api/apiClient';
 import { ForgotPasswordScreen } from '../../../src/features/auth/ForgotPasswordScreen';
 import { InstructionsSentScreen } from '../../../src/features/auth/InstructionsSentScreen';
@@ -19,7 +20,7 @@ const routes = {
   'instructions-sent': InstructionsSentScreen,
   'reset-password': ResetPasswordScreen,
   'reset-success': ResetSuccessScreen,
-  'sign-in': () => null,
+  'sign-in': () => <Text>Sign in screen</Text>,
 };
 
 describe('password reset screens', () => {
@@ -45,6 +46,13 @@ describe('password reset screens', () => {
     fireEvent.press(screen.getByRole('button', { name: 'Reset password' }));
     expect(await screen.findByText('Password reset.')).toBeTruthy();
     expect(mockedReset).toHaveBeenCalledWith('abc123', 'Brand-New-Pass-2027');
+  });
+
+  it('leads back to sign in from Set a new password', async () => {
+    renderRouter(routes, { initialUrl: '/reset-password?token=abc123' });
+    fireEvent.press(screen.getByRole('link', { name: 'Back to sign in' }));
+    expect(await screen.findByText('Sign in screen')).toBeTruthy();
+    expect(mockedReset).not.toHaveBeenCalled();
   });
 
   it('enforces 12 characters and matching passwords', async () => {

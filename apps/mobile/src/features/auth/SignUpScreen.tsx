@@ -8,6 +8,7 @@ import { Screen } from '../../components/Screen';
 import { Text } from '../../components/Text';
 import { TextField } from '../../components/TextField';
 import { TextLink } from '../../components/TextLink';
+import { SacStateSsoButton } from './SacStateSsoButton';
 import { useAuthStore } from '../../state/authStore';
 import { fieldErrors, serverFieldErrors } from '../forms/fieldErrors';
 import { signUp } from './signupApi';
@@ -68,6 +69,7 @@ export function SignUpScreen() {
           onAction={() => void submit()}
         />
       ) : null}
+      <SacStateSsoButton dividerLabel="or create an account with email" />
       <TextField
         label="Full name"
         value={displayName}
