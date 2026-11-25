@@ -36,11 +36,16 @@ describe('panelView', () => {
 });
 
 describe('parseOutcome', () => {
-  it('reads known outcomes and falls back to registered', () => {
+  it('accepts valid registration outcomes', () => {
+    expect(parseOutcome('registered')).toBe('registered');
+    expect(parseOutcome('already')).toBe('already');
     expect(parseOutcome('full')).toBe('full');
     expect(parseOutcome('closed')).toBe('closed');
-    expect(parseOutcome('already')).toBe('already');
-    expect(parseOutcome(undefined)).toBe('registered');
-    expect(parseOutcome('nonsense')).toBe('registered');
+  });
+
+  it('rejects missing or invalid outcomes', () => {
+    expect(parseOutcome(undefined)).toBeNull();
+    expect(parseOutcome('nonsense')).toBeNull();
+    expect(parseOutcome('')).toBeNull();
   });
 });

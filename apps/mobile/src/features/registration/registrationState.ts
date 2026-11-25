@@ -34,7 +34,11 @@ export function panelView(
 /** Where the registration flow ends up, as the result screen's `outcome` parameter. */
 export type RegistrationOutcome = 'registered' | 'already' | 'full' | 'closed';
 
-/** Reads the `outcome` route parameter; anything unexpected falls back to `registered`. */
-export function parseOutcome(raw: string | undefined): RegistrationOutcome {
-  return raw === 'already' || raw === 'full' || raw === 'closed' ? raw : 'registered';
+/** Reads the outcome parameter and rejects invalid values. */
+export function parseOutcome(raw: string | undefined): RegistrationOutcome | null {
+  if (raw === 'registered' || raw === 'already' || raw === 'full' || raw === 'closed') {
+    return raw;
+  }
+
+  return null;
 }

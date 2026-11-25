@@ -1,13 +1,20 @@
+
 import type { TripDetail } from '@snowsync/shared';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '../../components/Button';
 import { DetailCard } from '../../components/DetailCard';
+import { LoadingSkeleton } from '../../components/LoadingSkeleton';
+import { Screen } from '../../components/Screen';
 import { StatusHero } from '../../components/StatusHero';
 import { StatusLayout } from '../../components/StatusLayout';
 import { formatCost, formatDateTime, formatShortDate, formatTime } from '../trips/tripFormat';
+import { getMyRegistration } from './registrationApi';
 import { parseOutcome, type RegistrationOutcome } from './registrationState';
 import { TripLoadGate } from './TripLoadGate';
 import { useTripDetail } from './useTripDetail';
+
+type VerificationState = 'loading' | 'confirmed' | 'unconfirmed' | 'failed';
 
 /** Back to Trip detail, which sits under this screen in the stack. */
 function viewTrip(tripId: string): void {
@@ -17,6 +24,7 @@ function viewTrip(tripId: string): void {
 
 function ResultContent({ trip, outcome }: { trip: TripDetail; outcome: RegistrationOutcome }) {
   const tz = trip.resortTimeZone;
+
   if (outcome === 'already') {
     return (
       <StatusLayout
@@ -44,6 +52,7 @@ function ResultContent({ trip, outcome }: { trip: TripDetail; outcome: Registrat
       </StatusLayout>
     );
   }
+
   if (outcome === 'full') {
     return (
       <StatusLayout
@@ -54,13 +63,13 @@ function ResultContent({ trip, outcome }: { trip: TripDetail; outcome: Registrat
           tone="amber"
           caption="No reservation created"
           title="This trip is full"
-          subtitle={`${trip.capacity} / ${trip.capacity} spots reserved. No reservation was created. Check another trip or ask an officer about availability.`}
+          subtitle={`${trip.registeredCount} / ${trip.capacity} spots reserved. No reservation was created. Check another trip or ask an officer about availability.`}
         />
         <DetailCard
           title="Capacity"
           rows={[
-            { label: 'Registered', value: String(trip.capacity) },
-            { label: 'Remaining', value: '0' },
+            { label: 'Registered', value: String(trip.registeredCount) },
+            { label: 'Remaining', value: String(Math.max(0, trip.capacity - trip.registeredCount)) },
           ]}
         />
         <DetailCard
@@ -70,6 +79,7 @@ function ResultContent({ trip, outcome }: { trip: TripDetail; outcome: Registrat
       </StatusLayout>
     );
   }
+
   if (outcome === 'closed') {
     return (
       <StatusLayout footer={<Button label="See trip officers" onPress={() => viewTrip(trip.id)} />}>
@@ -94,6 +104,7 @@ function ResultContent({ trip, outcome }: { trip: TripDetail; outcome: Registrat
       </StatusLayout>
     );
   }
+
   return (
     <StatusLayout footer={<Button label="View my trip" onPress={() => viewTrip(trip.id)} />}>
       <StatusHero
@@ -122,6 +133,90 @@ function ResultContent({ trip, outcome }: { trip: TripDetail; outcome: Registrat
   );
 }
 
+/** Checks the current member's registration before displaying a success result. */
+function VerifiedResult({
+  trip,
+  outcome,
+}: {
+  trip: TripDetail;
+  outcome: RegistrationOutcome;
+}) {
+  const [verification, setVerification] = useState<VerificationState>('loading');
+  const latestRequest = useRef(0);
+
+  const verify = useCallback(() => {
+    const requestId = ++latestRequest.current;
+    setVerification('loading');
+
+    getMyRegistration(trip.id).then(
+      (registration) => {
+        if (requestId !== latestRequest.current) return;
+
+        const confirmed = ['REGISTERED', 'CHECKED_IN', 'ACTIVE'].includes(
+          registration.participation,
+        );
+
+        setVerification(confirmed ? 'confirmed' : 'unconfirmed');
+      },
+      () => {
+        if (requestId === latestRequest.current) {
+          setVerification('failed');
+        }
+      },
+    );
+  }, [trip.id]);
+
+  useEffect(() => {
+    verify();
+
+    return () => {
+      latestRequest.current++;
+    };
+  }, [verify]);
+
+  if (verification === 'loading') {
+    return (
+      <Screen edges={['bottom']}>
+        <LoadingSkeleton lines={4} accessibilityLabel="Verifying registration" />
+      </Screen>
+    );
+  }
+
+  if (verification === 'failed') {
+    return (
+      <StatusLayout
+        footer={<Button label="Try again" onPress={verify} />}
+      >
+        <StatusHero
+          chip="UNKNOWN"
+          tone="amber"
+          caption="Registration verification failed"
+          title="Unable to confirm registration"
+          subtitle="We couldn't check your registration status. Please try again."
+        />
+      </StatusLayout>
+    );
+  }
+
+  if (verification === 'unconfirmed') {
+    return (
+      <StatusLayout
+        footer={<Button label="View trip" onPress={() => router.replace(`/trip/${trip.id}`)} />}
+      >
+        <StatusHero
+          chip="UNKNOWN"
+          tone="amber"
+          caption="Registration status unavailable"
+          title="Unable to confirm registration"
+          subtitle="Your registration could not be confirmed. Check your trip details for your current status."
+        />
+      </StatusLayout>
+    );
+  }
+
+  return <ResultContent trip={trip} outcome={outcome} />;
+}
+
 /**
  * Where registering ends up (SS-28, Figma catalog 10 pages 33–35): confirmed, already registered
  * (duplicate blocked), full or closed. Route /trip/registration-result/:tripId?outcome=…
@@ -129,9 +224,29 @@ function ResultContent({ trip, outcome }: { trip: TripDetail; outcome: Registrat
 export function RegistrationResultScreen() {
   const { tripId, outcome } = useLocalSearchParams<{ tripId: string; outcome?: string }>();
   const { state, reload } = useTripDetail(tripId);
+  const parsedOutcome = parseOutcome(outcome);
+
   return (
     <TripLoadGate state={state} onRetry={reload}>
-      {(trip) => <ResultContent trip={trip} outcome={parseOutcome(outcome)} />}
+      {(trip) =>
+        parsedOutcome === null ? (
+          <StatusLayout
+            footer={<Button label="View trip" onPress={() => router.replace(`/trip/${trip.id}`)} />}
+          >
+            <StatusHero
+              chip="UNKNOWN"
+              tone="amber"
+              caption="Registration status unavailable"
+              title="Unable to confirm registration"
+              subtitle="We couldn't determine the registration result. Check your trip details to see your current status."
+            />
+          </StatusLayout>
+        ) : parsedOutcome === 'registered' || parsedOutcome === 'already' ? (
+          <VerifiedResult trip={trip} outcome={parsedOutcome} />
+        ) : (
+          <ResultContent trip={trip} outcome={parsedOutcome} />
+        )
+      }
     </TripLoadGate>
   );
 }
