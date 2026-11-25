@@ -30,7 +30,9 @@ export function TripListCard({ trip, onOpen }: TripListCardProps) {
       </Text>
       <View style={styles.badges}>
         <TripStateBadge state={trip.state} />
-        <ParticipationBadge participation={trip.myParticipation} />
+        {trip.state !== 'CREATED' ? (
+          <ParticipationBadge participation={trip.myParticipation} />
+        ) : null}
       </View>
       <Button label="Open" onPress={onOpen} accessibilityHint={`Opens ${trip.name}`} />
     </Card>
