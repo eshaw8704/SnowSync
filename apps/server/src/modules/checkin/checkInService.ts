@@ -22,15 +22,16 @@ export function minutesLate(sessionStartsAt: Date, now: Date): number | null {
   return minutes > 0 ? minutes : null;
 }
 
-//The operation ID was already used for a change to a different member or trip
+//The operation ID was already used for a different change. Uses the same reason as the shared
+//participation code, so a reused ID gets one consistent answer whatever the member's state
 function reusedOperationId(): HttpError {
   return new HttpError('CONFLICT', 'This operation ID was already used for another change.', {
-    reason: 'OPERATION_ID_REUSED',
+    reason: RegistrationErrorReason.PARTICIPATION_NOT_ALLOWED,
   });
 }
 
 //True when this opId is already stored against a different member or trip. A retry of the same
-//change (same opId, same member, same trip) is not a conflict
+//change (same opId, same member, same trip) is not a conflict.
 async function opIdUsedElsewhere(
   tx: Prisma.TransactionClient,
   opId: string,
@@ -47,13 +48,11 @@ async function opIdUsedElsewhere(
   return event.tripMembership.tripId !== tripId || event.tripMembership.userId !== userId;
 }
 
-/**
- * POST /admin/trips/:tripId/checkins (SS-33). An officer confirms a member is physically present:
- * REGISTERED → CHECKED_IN with method OFFICER, the officer's id, the reason and the time. Only
- * while the trip is in CHECK_IN or ACTIVE. A member who is already checked in (or active) gets
- * their existing record back and nothing new is written; so does a retry with the same opId.
- * An opId already used for a different member or trip is refused with a conflict.
- */
+//POST /admin/trips/:tripId/checkins (SS-33). An officer confirms a member is physically present:
+//REGISTERED → CHECKED_IN with method OFFICER, the officer's id, the reason and the time. Only
+//while the trip is in CHECK_IN or ACTIVE. A member who is already checked in (or active) gets
+//their existing record back and nothing new is written; so does a retry with the same opId.
+//An opId already used for a different member or trip is refused with a conflict
 export async function officerCheckIn(
   officerId: string,
   tripId: string,
