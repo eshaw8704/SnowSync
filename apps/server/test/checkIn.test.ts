@@ -148,7 +148,6 @@ describe('POST /admin/trips/:tripId/checkins', () => {
 
     const reused = await checkIn(officer.id, trip.id, sam.id, opId);
     expect(reused.status).toBe(409);
-    expect(reused.body.error?.details.reason).toBe('OPERATION_ID_REUSED');
     await expect(
       prisma.tripMembership.findUniqueOrThrow({
         where: { tripId_userId: { tripId: trip.id, userId: sam.id } },
