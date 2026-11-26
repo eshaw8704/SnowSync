@@ -54,19 +54,25 @@ describe('SnowSync AWS stacks', () => {
   });
 
   it('opens the database and Redis only to the server tasks', () => {
-    const fromServiceGroup = {
-      'Fn::GetAtt': [Match.stringLikeRegexp('^ServiceSecurityGroup'), 'GroupId'],
-    };
-    stacks.service.hasResourceProperties('AWS::EC2::SecurityGroupIngress', {
-      FromPort: 5432,
-      ToPort: 5432,
-      SourceSecurityGroupId: fromServiceGroup,
-    });
-    stacks.service.hasResourceProperties('AWS::EC2::SecurityGroupIngress', {
-      FromPort: 6379,
-      ToPort: 6379,
-      SourceSecurityGroupId: fromServiceGroup,
-    });
+    const rules = Object.values(stacks.service.findResources('AWS::EC2::SecurityGroupIngress')) as {
+      Properties: Record<string, unknown>;
+    }[];
+    // No separate ingress rule in the service stack may open a public IP range.
+    for (const rule of rules) {
+      expect(rule.Properties.CidrIp).toBeUndefined();
+      expect(rule.Properties.CidrIpv6).toBeUndefined();
+    }
+    // Exactly one rule each for PostgreSQL and Redis, both from the service security group.
+    const dataRules = rules.filter((rule) =>
+      [5432, 6379].includes(rule.Properties.FromPort as number),
+    );
+    expect(dataRules.map((rule) => rule.Properties.FromPort).sort()).toEqual([5432, 6379]);
+    for (const rule of dataRules) {
+      expect(rule.Properties.ToPort).toBe(rule.Properties.FromPort);
+      expect(rule.Properties.SourceSecurityGroupId).toEqual({
+        'Fn::GetAtt': [expect.stringMatching(/^ServiceSecurityGroup/), 'GroupId'],
+      });
+    }
     stacks.data.resourceCountIs('AWS::EC2::SecurityGroupIngress', 0);
     const dataGroups = stacks.data.findResources('AWS::EC2::SecurityGroup');
     expect(JSON.stringify(dataGroups)).not.toContain('0.0.0.0/0');
@@ -150,6 +156,15 @@ describe('SnowSync AWS stacks', () => {
     const policies = JSON.stringify(stacks.deploy.findResources('AWS::IAM::Policy'));
     expect(policies).toContain('ecs:RegisterTaskDefinition');
     expect(policies).toMatch(/task-definition\/.*:\*/);
+  });
+
+  it('reuses an existing GitHub OIDC provider with -c createGithubOidcProvider=false', () => {
+    stacks.deploy.resourceCountIs('Custom::AWSCDKOpenIdConnectProvider', 1);
+    // -c on the command line passes the string "false", not the boolean.
+    synth({ createGithubOidcProvider: 'false' }).deploy.resourceCountIs(
+      'Custom::AWSCDKOpenIdConnectProvider',
+      0,
+    );
   });
 
   it('verifies the sending domain with DKIM and lets only the server send', () => {

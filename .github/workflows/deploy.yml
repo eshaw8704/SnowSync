@@ -23,15 +23,43 @@ env:
   AWS_REGION: us-west-2
 
 jobs:
-  deploy:
-    name: build · migrate · deploy
+  check:
+    name: is this the latest commit?
     # Only after a green CI run on main (or a manual run), and only once AWS is set up.
     if: >-
       vars.AWS_DEPLOY_ROLE_ARN != '' &&
       (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
+    outputs:
+      deploy: ${{ steps.latest.outputs.deploy }}
+    steps:
+      - name: Skip commits that a newer one on main has replaced
+        id: latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          # CI runs can finish out of order; deploying an older commit after a newer one would put
+          # old code back live. A manual run always deploys.
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          latest=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          if [ "$latest" = "$SHA" ]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Skipping $SHA: main is now at $latest, which deploys itself."
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  deploy:
+    name: build · migrate · deploy
+    needs: check
+    if: needs.check.outputs.deploy == 'true'
+    runs-on: ubuntu-latest
     timeout-minutes: 30
-    environment: production
     steps:
       - name: Check out the commit CI tested
         uses: actions/checkout@v7
@@ -69,9 +97,9 @@ jobs:
           REPOSITORY: ${{ steps.stack.outputs.repository }}
           SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: |
+          # Only the commit tag is pushed now; `latest` is pushed at the end, once the deploy worked.
           docker build -f apps/server/Dockerfile -t "$REPOSITORY:$SHA" -t "$REPOSITORY:latest" .
           docker push "$REPOSITORY:$SHA"
-          docker push "$REPOSITORY:latest"
 
       - name: Register a task definition for this commit
         id: register
@@ -102,7 +130,7 @@ jobs:
           SUBNETS: ${{ steps.stack.outputs.subnets }}
           SECURITY_GROUP: ${{ steps.stack.outputs.security_group }}
         run: |
-          overrides=$(printf '{"containerOverrides":[{"name":"%s","command":["npm","run","db:deploy"]}]}' "$CONTAINER")
+          overrides=$(printf '{"containerOverrides":[{"name":"%s","command":["npm","run","db:deploy","--","--config","prisma7.config.ts"]}]}' "$CONTAINER")
           task=$(aws ecs run-task --cluster "$CLUSTER" --task-definition "$TASK_DEFINITION" \
             --launch-type FARGATE \
             --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUP],assignPublicIp=DISABLED}" \
@@ -125,3 +153,19 @@ jobs:
           aws ecs update-service --cluster "$CLUSTER" --service "$SERVICE" \
             --task-definition "$TASK_DEFINITION" > /dev/null
           aws ecs wait services-stable --cluster "$CLUSTER" --services "$SERVICE"
+          # The waiter also succeeds after a circuit-breaker rollback, so check what is actually running.
+          running=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
+            --query 'services[0].taskDefinition' --output text)
+          if [ "$running" != "$TASK_DEFINITION" ]; then
+            echo "::error::The new tasks failed and ECS rolled back to $running. This commit is not live."
+            exit 1
+          fi
+          echo "Running $running"
+
+      - name: Mark this image as latest
+        env:
+          REPOSITORY: ${{ steps.stack.outputs.repository }}
+        run: |
+          # Only after migrations and rollout succeeded, so `latest` (what the CDK task definition and
+          # the next cdk deploy use) never points at an image that failed.
+          docker push "$REPOSITORY:latest"

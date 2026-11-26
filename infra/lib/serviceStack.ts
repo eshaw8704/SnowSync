@@ -53,7 +53,8 @@ export class ServiceStack extends Stack {
       repositoryName: 'snowsync-server',
       imageScanOnPush: true,
       removalPolicy: RemovalPolicy.RETAIN,
-      lifecycleRules: [{ description: 'Keep the last 20 images', maxImageCount: 20 }],
+      // Every deploy attempt pushes a commit-tagged image; keep enough that failed attempts can't expire the image production is running, plus room to roll back.
+      lifecycleRules: [{ description: 'Keep the last 50 images', maxImageCount: 50 }],
     });
 
     const cluster = new ecs.Cluster(this, 'Cluster', {

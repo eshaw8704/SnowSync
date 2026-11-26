@@ -26,11 +26,13 @@ function required(app: App, name: string): string {
 
 /* Reads every setting and throws a clear message naming anything missing. */
 export function readConfig(app: App): SnowSyncConfig {
+  // cdk.json gives a boolean, but -c on the command line always gives a string.
+  const createOidc: unknown = app.node.tryGetContext('createGithubOidcProvider');
   return {
     certificateArn: required(app, 'certificateArn'),
     domainName: required(app, 'domainName'),
     emailFrom: required(app, 'emailFrom'),
     githubRepository: required(app, 'githubRepository'),
-    createGithubOidcProvider: app.node.tryGetContext('createGithubOidcProvider') !== false,
+    createGithubOidcProvider: createOidc !== false && createOidc !== 'false',
   };
 }

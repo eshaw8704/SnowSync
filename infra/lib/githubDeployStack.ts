@@ -41,13 +41,15 @@ export class GithubDeployStack extends Stack {
 
     props.repository.grantPullPush(role);
     // Each deploy registers a new revision pinned to the commit's image, so allow every revision
-    // of this task family (not just the one CDK created).
+    // of this task family (not just the one CDK created), only on SnowSync's cluster.
     role.addToPolicy(
       new iam.PolicyStatement({
         actions: ['ecs:RunTask'],
         resources: [
           `arn:aws:ecs:${this.region}:${this.account}:task-definition/${props.taskDefinition.family}:*`,
+          props.service.cluster.clusterArn,
         ],
+        conditions: { ArnEquals: { 'ecs:cluster': props.service.cluster.clusterArn } },
       }),
     );
     // These two can't be limited to specific resources in IAM.
