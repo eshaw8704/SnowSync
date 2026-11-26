@@ -62,9 +62,13 @@ export class ServiceStack extends Stack {
     });
     const databaseSecret = data.database.secret!;
 
+    // First deploy: -c desiredCount=0 (the ECR repository is still empty), then deploy again for 2.
+    const desiredCount = Number(this.node.tryGetContext('desiredCount') ?? 2);
+
     this.service = new ecsPatterns.ApplicationLoadBalancedFargateService(this, 'Service', {
       cluster,
-      desiredCount: 2,
+      // The pattern refuses 0, so 0 is set on the CloudFormation service below.
+      desiredCount: Math.max(desiredCount, 1),
       cpu: 512,
       memoryLimitMiB: 1024,
       minHealthyPercent: 100,
@@ -106,6 +110,9 @@ export class ServiceStack extends Stack {
         },
       },
     });
+    if (desiredCount === 0) {
+      (this.service.service.node.defaultChild as ecs.CfnService).desiredCount = 0;
+    }
 
     props.emailIdentity.grantSendEmail(this.service.taskDefinition.taskRole);
 

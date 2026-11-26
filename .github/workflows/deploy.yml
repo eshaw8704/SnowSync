@@ -1,0 +1,127 @@
+# SnowSync deploy (SS-35): every push to main that passes CI builds the server image, runs the
+# database migrations once as a one-off ECS task, then rolls the service. Each deploy registers a
+# task definition pinned to the commit's image, so a rollback really returns to the previous image.
+# Old tasks keep serving until new ones pass /health, so migrations must stay backward compatible.
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  id-token: write # GitHub OIDC: no AWS keys are stored in the repository
+  contents: read
+
+env:
+  AWS_REGION: us-west-2
+
+jobs:
+  deploy:
+    name: build · migrate · deploy
+    # Only after a green CI run on main (or a manual run), and only once AWS is set up.
+    if: >-
+      vars.AWS_DEPLOY_ROLE_ARN != '' &&
+      (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    steps:
+      - name: Check out the commit CI tested
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Sign in to AWS with GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Read the stack outputs
+        id: stack
+        run: |
+          out() {
+            aws cloudformation describe-stacks --stack-name SnowSyncService \
+              --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text
+          }
+          {
+            echo "repository=$(out RepositoryUri)"
+            echo "cluster=$(out ClusterName)"
+            echo "service=$(out ServiceName)"
+            echo "task_definition=$(out TaskDefinitionArn)"
+            echo "container=$(out ContainerName)"
+            echo "subnets=$(out PrivateSubnetIds)"
+            echo "security_group=$(out ServiceSecurityGroupId)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Sign in to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push the server image
+        env:
+          REPOSITORY: ${{ steps.stack.outputs.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          docker build -f apps/server/Dockerfile -t "$REPOSITORY:$SHA" -t "$REPOSITORY:latest" .
+          docker push "$REPOSITORY:$SHA"
+          docker push "$REPOSITORY:latest"
+
+      - name: Register a task definition for this commit
+        id: register
+        env:
+          TASK_DEFINITION: ${{ steps.stack.outputs.task_definition }}
+          CONTAINER: ${{ steps.stack.outputs.container }}
+          IMAGE: ${{ steps.stack.outputs.repository }}:${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          # Copy the CDK task definition, pin the server container to this commit's image, and
+          # drop the read-only fields ECS adds so it can be registered as a new revision.
+          aws ecs describe-task-definition --task-definition "$TASK_DEFINITION" \
+            --query taskDefinition --output json \
+            | jq --arg name "$CONTAINER" --arg image "$IMAGE" '
+                (.containerDefinitions[] | select(.name == $name) | .image) = $image
+                | del(.taskDefinitionArn, .revision, .status, .requiresAttributes,
+                      .compatibilities, .registeredAt, .registeredBy, .deregisteredAt)' \
+            > task-definition.json
+          arn=$(aws ecs register-task-definition --cli-input-json file://task-definition.json \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+          echo "Registered $arn"
+          echo "arn=$arn" >> "$GITHUB_OUTPUT"
+
+      - name: Run database migrations once
+        env:
+          CLUSTER: ${{ steps.stack.outputs.cluster }}
+          TASK_DEFINITION: ${{ steps.register.outputs.arn }}
+          CONTAINER: ${{ steps.stack.outputs.container }}
+          SUBNETS: ${{ steps.stack.outputs.subnets }}
+          SECURITY_GROUP: ${{ steps.stack.outputs.security_group }}
+        run: |
+          overrides=$(printf '{"containerOverrides":[{"name":"%s","command":["npm","run","db:deploy"]}]}' "$CONTAINER")
+          task=$(aws ecs run-task --cluster "$CLUSTER" --task-definition "$TASK_DEFINITION" \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUP],assignPublicIp=DISABLED}" \
+            --overrides "$overrides" --query 'tasks[0].taskArn' --output text)
+          echo "Migration task: $task"
+          aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$task"
+          code=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$task" \
+            --query 'tasks[0].containers[0].exitCode' --output text)
+          if [ "$code" != "0" ]; then
+            echo "::error::Migrations failed (exit code $code). The running service was not changed."
+            exit 1
+          fi
+
+      - name: Roll the service onto this commit's task definition
+        env:
+          CLUSTER: ${{ steps.stack.outputs.cluster }}
+          SERVICE: ${{ steps.stack.outputs.service }}
+          TASK_DEFINITION: ${{ steps.register.outputs.arn }}
+        run: |
+          aws ecs update-service --cluster "$CLUSTER" --service "$SERVICE" \
+            --task-definition "$TASK_DEFINITION" > /dev/null
+          aws ecs wait services-stable --cluster "$CLUSTER" --services "$SERVICE"

@@ -1,0 +1,14 @@
+# Keep the server image small and free of secrets. Built from the repository root.
+**/node_modules
+**/.env
+**/.env.*
+!**/.env.example
+.git
+.github
+**/coverage
+**/cdk.out
+apps/server/src/generated
+apps/mobile/*
+!apps/mobile/package.json
+infra/*
+!infra/package.json

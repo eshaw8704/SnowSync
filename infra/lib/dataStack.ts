@@ -61,15 +61,21 @@ export class DataStack extends Stack {
       description: 'SnowSync Redis (isolated subnets)',
       subnetIds: props.vpc.selectSubnets(isolated).subnetIds,
     });
-    const redis = new elasticache.CfnCacheCluster(this, 'Redis', {
+    // A replication group (one node) because Redis only supports TLS there; the server connects with rediss://.
+    // A plain CfnCacheCluster can't encrypt Redis traffic.
+    const redis = new elasticache.CfnReplicationGroup(this, 'Redis', {
+      replicationGroupDescription: 'SnowSync Redis',
       engine: 'redis',
       cacheNodeType: 'cache.t4g.micro',
-      numCacheNodes: 1,
+      numCacheClusters: 1,
+      automaticFailoverEnabled: false,
       cacheSubnetGroupName: redisSubnets.ref,
-      vpcSecurityGroupIds: [this.redisSecurityGroup.securityGroupId],
+      securityGroupIds: [this.redisSecurityGroup.securityGroupId],
+      transitEncryptionEnabled: true,
+      atRestEncryptionEnabled: true,
     });
-    this.redisEndpoint = redis.attrRedisEndpointAddress;
-    this.redisPort = redis.attrRedisEndpointPort;
+    this.redisEndpoint = redis.attrPrimaryEndPointAddress;
+    this.redisPort = redis.attrPrimaryEndPointPort;
 
     this.jwtSecret = new secretsmanager.Secret(this, 'JwtAccessSecret', {
       description: 'SnowSync JWT_ACCESS_SECRET (signs access tokens)',
