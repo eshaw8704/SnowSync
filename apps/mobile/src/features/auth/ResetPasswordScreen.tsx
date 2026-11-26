@@ -7,6 +7,7 @@ import { Button } from '../../components/Button';
 import { ErrorState } from '../../components/ErrorState';
 import { Screen } from '../../components/Screen';
 import { TextField } from '../../components/TextField';
+import { TextLink } from '../../components/TextLink';
 import { fieldErrors } from '../forms/fieldErrors';
 import { resetPassword } from './passwordResetApi';
 
@@ -34,6 +35,7 @@ export function ResetPasswordScreen() {
           actionLabel="Request a new link"
           onAction={() => router.replace('/forgot-password')}
         />
+        <TextLink label="Back to sign in" href="/sign-in" />
       </Screen>
     );
   }
@@ -93,6 +95,7 @@ export function ResetPasswordScreen() {
         textContentType="newPassword"
       />
       <Button label="Reset password" onPress={() => void submit()} loading={saving} />
+      <TextLink label="Back to sign in" href="/sign-in" />
     </Screen>
   );
 }

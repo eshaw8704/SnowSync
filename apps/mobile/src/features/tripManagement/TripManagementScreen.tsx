@@ -50,6 +50,7 @@ function Row({ label, value }: { label: string; value: string }) {
 export function TripManagementScreen() {
   const { tripId } = useLocalSearchParams<{ tripId: string }>();
   const canManage = useAuthStore(selectHasPermission('MANAGE_TRIPS'));
+  const canManageRoster = useAuthStore(selectHasPermission('MANAGE_ROSTER'));
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   const [notice, setNotice] = useState<string>();
 
@@ -126,7 +127,9 @@ export function TripManagementScreen() {
       <View style={styles.header}>
         <View style={styles.badges}>
           <TripStateBadge state={trip.state} />
-          <ParticipationBadge participation={trip.myParticipation} />
+          {trip.state !== 'CREATED' ? (
+            <ParticipationBadge participation={trip.myParticipation} />
+          ) : null}
         </View>
         <Text variant="title" accessibilityRole="header">
           {trip.name}
@@ -156,6 +159,13 @@ export function TripManagementScreen() {
         />
         <Row label="Roster" value={`${trip.registeredCount} of ${trip.capacity} registered`} />
       </Card>
+      {canManageRoster ? (
+        <Button
+          label="View roster"
+          variant="secondary"
+          onPress={() => router.push(`/trip/roster/${trip.id}`)}
+        />
+      ) : null}
       <LifecycleActions trip={trip} onChanged={onChanged} />
       {EDITABLE_STATES.includes(trip.state) ? (
         <Button

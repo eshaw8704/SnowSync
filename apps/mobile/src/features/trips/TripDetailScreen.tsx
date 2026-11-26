@@ -44,6 +44,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 export function TripDetailScreen() {
   const { tripId } = useLocalSearchParams<{ tripId: string }>();
   const canManage = useAuthStore(selectHasPermission('MANAGE_TRIPS'));
+  const canManageRoster = useAuthStore(selectHasPermission('MANAGE_ROSTER'));
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
 
   //Only the newest request may update the screen, so a slow earlier response cannot replace a
@@ -178,6 +179,13 @@ export function TripDetailScreen() {
         ))}
       </Section>
       <RegistrationPanel trip={trip} />
+      {canManageRoster ? (
+        <Button
+          label="View roster"
+          variant="secondary"
+          onPress={() => router.push(`/trip/roster/${trip.id}`)}
+        />
+      ) : null}
       {canManage ? (
         <Button
           label="Manage trip"
