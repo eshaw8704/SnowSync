@@ -7,8 +7,9 @@ export interface SnowSyncConfig {
   domainName: string;
   // Must be on the SES-verified domain.
   emailFrom: string;
-  // owner/repo allowed to deploy through GitHub OIDC.
-  githubRepository: string;
+  // GitHub's OIDC subject prefix for this repo (its sub_claim_prefix), e.g.
+  // repo:owner@ownerId/repo@repoId when the repo uses immutable subjects.
+  githubOidcSubjectPrefix: string;
   // False when the account already has GitHub's OIDC provider.
   createGithubOidcProvider: boolean;
 }
@@ -32,7 +33,7 @@ export function readConfig(app: App): SnowSyncConfig {
     certificateArn: required(app, 'certificateArn'),
     domainName: required(app, 'domainName'),
     emailFrom: required(app, 'emailFrom'),
-    githubRepository: required(app, 'githubRepository'),
+    githubOidcSubjectPrefix: required(app, 'githubOidcSubjectPrefix'),
     createGithubOidcProvider: createOidc !== false && createOidc !== 'false',
   };
 }

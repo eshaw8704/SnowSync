@@ -8,7 +8,7 @@ const CONTEXT = {
   certificateArn: 'arn:aws:acm:us-west-2:111111111111:certificate/test',
   domainName: 'api.snowsync.test',
   emailFrom: 'SnowSync <no-reply@snowsync.test>',
-  githubRepository: 'eshaw8704/SnowSync',
+  githubOidcSubjectPrefix: 'repo:eshaw8704@144884675/SnowSync@1416399208',
 };
 
 function synth(extraContext: Record<string, unknown> = {}) {
@@ -135,6 +135,7 @@ describe('SnowSync AWS stacks', () => {
   });
 
   it('lets only main of the SnowSync repository deploy, without stored AWS keys', () => {
+    // The repo uses GitHub's immutable OIDC subject (owner and repo IDs), not the name-only one.
     stacks.deploy.hasResourceProperties('AWS::IAM::Role', {
       AssumeRolePolicyDocument: {
         Statement: [
@@ -144,13 +145,15 @@ describe('SnowSync AWS stacks', () => {
               StringEquals: { 'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com' },
               StringLike: {
                 'token.actions.githubusercontent.com:sub':
-                  'repo:eshaw8704/SnowSync:ref:refs/heads/main',
+                  'repo:eshaw8704@144884675/SnowSync@1416399208:ref:refs/heads/main',
               },
             },
           }),
         ],
       },
     });
+    const roles = JSON.stringify(stacks.deploy.findResources('AWS::IAM::Role'));
+    expect(roles).not.toContain('repo:eshaw8704/SnowSync:');
     stacks.deploy.resourceCountIs('AWS::IAM::User', 0);
     // Each deploy registers a revision pinned to the commit's image and runs it.
     const policies = JSON.stringify(stacks.deploy.findResources('AWS::IAM::Policy'));
@@ -186,8 +189,8 @@ describe('SnowSync AWS stacks', () => {
   });
 
   it('refuses to synthesize without the domain and certificate', () => {
-    expect(() => buildApp(new App({ context: { githubRepository: 'a/b' } }))).toThrow(
-      'certificateArn',
-    );
+    expect(() =>
+      buildApp(new App({ context: { githubOidcSubjectPrefix: 'repo:a@1/b@2' } })),
+    ).toThrow('certificateArn');
   });
 });

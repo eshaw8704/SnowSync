@@ -18,6 +18,11 @@ are generated into AWS Secrets Manager when the stacks are deployed.
 2. **A domain** for the API (for example `api.snowsync.app`) and an **ACM certificate** for it in the
    deploy region. Copy the certificate ARN.
 3. **The sender address** on a domain you control, for example `SnowSync <no-reply@snowsync.app>`.
+4. **GitHub's OIDC subject prefix** is already set in `cdk.json` (`githubOidcSubjectPrefix`). The
+   deploy role only trusts that exact subject on `main`. This repo uses GitHub's immutable subjects
+   (owner and repo IDs), so it looks like `repo:owner@ownerId/repo@repoId`. If the repo's OIDC
+   settings ever change, read the new value with
+   `gh api repos/eshaw8704/SnowSync/actions/oidc/customization/sub` (`sub_claim_prefix`).
 
 ## First deploy
 

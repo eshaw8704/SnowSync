@@ -33,8 +33,9 @@ export class GithubDeployStack extends Stack {
       description: 'GitHub Actions deploys SnowSync from main',
       assumedBy: new iam.WebIdentityPrincipal(provider.openIdConnectProviderArn, {
         StringEquals: { [`${issuer}:aud`]: 'sts.amazonaws.com' },
+        // GitHub's exact subject for this repo (immutable owner/repo IDs), limited to main.
         StringLike: {
-          [`${issuer}:sub`]: `repo:${props.config.githubRepository}:ref:refs/heads/main`,
+          [`${issuer}:sub`]: `${props.config.githubOidcSubjectPrefix}:ref:refs/heads/main`,
         },
       }),
     });

@@ -1,7 +1,7 @@
 {
   "app": "npx tsx bin/snowsync.ts",
   "context": {
-    "githubRepository": "eshaw8704/SnowSync",
+    "githubOidcSubjectPrefix": "repo:eshaw8704@144884675/SnowSync@1416399208",
     "createGithubOidcProvider": true,
     "emailFrom": "SnowSync <no-reply@REPLACE-WITH-DOMAIN>",
     "@aws-cdk/aws-ecs:enableImdsBlockingDeprecatedFeature": false
