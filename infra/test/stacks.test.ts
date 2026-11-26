@@ -8,16 +8,17 @@ const CONTEXT = {
   certificateArn: 'arn:aws:acm:us-west-2:111111111111:certificate/test',
   domainName: 'api.snowsync.test',
   emailFrom: 'SnowSync <no-reply@snowsync.test>',
-  githubRepository: 'eshaw8704/SnowSync',
+  githubOidcSubjectPrefix: 'repo:eshaw8704@144884675/SnowSync@1416399208',
 };
 
-function synth() {
-  const app = buildApp(new App({ context: CONTEXT }));
+function synth(extraContext: Record<string, unknown> = {}) {
+  const app = buildApp(new App({ context: { ...CONTEXT, ...extraContext } }));
   const template = (name: string) => Template.fromStack(app.node.findChild(name) as Stack);
   return {
     network: template('SnowSyncNetwork'),
     data: template('SnowSyncData'),
     service: template('SnowSyncService'),
+    deploy: template('SnowSyncGithubDeploy'),
     email: template('SnowSyncEmail'),
   };
 }
@@ -39,17 +40,39 @@ describe('SnowSync AWS stacks', () => {
     });
   });
 
+  it('encrypts Redis in transit and at rest', () => {
+    stacks.data.hasResourceProperties('AWS::ElastiCache::ReplicationGroup', {
+      Engine: 'redis',
+      NumCacheClusters: 1,
+      TransitEncryptionEnabled: true,
+      AtRestEncryptionEnabled: true,
+    });
+    stacks.data.resourceCountIs('AWS::ElastiCache::CacheCluster', 0);
+    const taskDefinition = JSON.stringify(stacks.service.findResources('AWS::ECS::TaskDefinition'));
+    expect(taskDefinition).toContain('"Name":"REDIS_URL"');
+    expect(taskDefinition).toContain('rediss://');
+  });
+
   it('opens the database and Redis only to the server tasks', () => {
-    stacks.service.hasResourceProperties('AWS::EC2::SecurityGroupIngress', {
-      FromPort: 5432,
-      ToPort: 5432,
-      SourceSecurityGroupId: Match.anyValue(),
-    });
-    stacks.service.hasResourceProperties('AWS::EC2::SecurityGroupIngress', {
-      FromPort: 6379,
-      ToPort: 6379,
-      SourceSecurityGroupId: Match.anyValue(),
-    });
+    const rules = Object.values(stacks.service.findResources('AWS::EC2::SecurityGroupIngress')) as {
+      Properties: Record<string, unknown>;
+    }[];
+    // No separate ingress rule in the service stack may open a public IP range.
+    for (const rule of rules) {
+      expect(rule.Properties.CidrIp).toBeUndefined();
+      expect(rule.Properties.CidrIpv6).toBeUndefined();
+    }
+    // Exactly one rule each for PostgreSQL and Redis, both from the service security group.
+    const dataRules = rules.filter((rule) =>
+      [5432, 6379].includes(rule.Properties.FromPort as number),
+    );
+    expect(dataRules.map((rule) => rule.Properties.FromPort).sort()).toEqual([5432, 6379]);
+    for (const rule of dataRules) {
+      expect(rule.Properties.ToPort).toBe(rule.Properties.FromPort);
+      expect(rule.Properties.SourceSecurityGroupId).toEqual({
+        'Fn::GetAtt': [expect.stringMatching(/^ServiceSecurityGroup/), 'GroupId'],
+      });
+    }
     stacks.data.resourceCountIs('AWS::EC2::SecurityGroupIngress', 0);
     const dataGroups = stacks.data.findResources('AWS::EC2::SecurityGroup');
     expect(JSON.stringify(dataGroups)).not.toContain('0.0.0.0/0');
@@ -66,6 +89,18 @@ describe('SnowSync AWS stacks', () => {
       NetworkConfiguration: {
         AwsvpcConfiguration: Match.objectLike({ AssignPublicIp: 'DISABLED' }),
       },
+    });
+    const service = Object.values(stacks.service.findResources('AWS::ECS::Service'))[0] as {
+      Properties: { NetworkConfiguration: unknown };
+    };
+    const subnets = JSON.stringify(service.Properties.NetworkConfiguration);
+    expect(subnets).toMatch(/appSubnet/);
+    expect(subnets).not.toMatch(/publicSubnet|dataSubnet/);
+  });
+
+  it('starts with no tasks on the first deploy (-c desiredCount=0)', () => {
+    synth({ desiredCount: 0 }).service.hasResourceProperties('AWS::ECS::Service', {
+      DesiredCount: 0,
     });
   });
 
@@ -99,6 +134,42 @@ describe('SnowSync AWS stacks', () => {
     expect(JSON.stringify(taskDefinition)).not.toMatch(/"Name":"DATABASE_URL"/);
   });
 
+  it('lets only main of the SnowSync repository deploy, without stored AWS keys', () => {
+    // The repo uses GitHub's immutable OIDC subject (owner and repo IDs), not the name-only one.
+    stacks.deploy.hasResourceProperties('AWS::IAM::Role', {
+      AssumeRolePolicyDocument: {
+        Statement: [
+          Match.objectLike({
+            Action: 'sts:AssumeRoleWithWebIdentity',
+            Condition: {
+              StringEquals: { 'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com' },
+              StringLike: {
+                'token.actions.githubusercontent.com:sub':
+                  'repo:eshaw8704@144884675/SnowSync@1416399208:ref:refs/heads/main',
+              },
+            },
+          }),
+        ],
+      },
+    });
+    const roles = JSON.stringify(stacks.deploy.findResources('AWS::IAM::Role'));
+    expect(roles).not.toContain('repo:eshaw8704/SnowSync:');
+    stacks.deploy.resourceCountIs('AWS::IAM::User', 0);
+    // Each deploy registers a revision pinned to the commit's image and runs it.
+    const policies = JSON.stringify(stacks.deploy.findResources('AWS::IAM::Policy'));
+    expect(policies).toContain('ecs:RegisterTaskDefinition');
+    expect(policies).toMatch(/task-definition\/.*:\*/);
+  });
+
+  it('reuses an existing GitHub OIDC provider with -c createGithubOidcProvider=false', () => {
+    stacks.deploy.resourceCountIs('Custom::AWSCDKOpenIdConnectProvider', 1);
+    // -c on the command line passes the string "false", not the boolean.
+    synth({ createGithubOidcProvider: 'false' }).deploy.resourceCountIs(
+      'Custom::AWSCDKOpenIdConnectProvider',
+      0,
+    );
+  });
+
   it('verifies the sending domain with DKIM and lets only the server send', () => {
     expect(sendingDomain('SnowSync <no-reply@snowsync.test>')).toBe('snowsync.test');
     stacks.email.hasResourceProperties('AWS::SES::EmailIdentity', {
@@ -111,14 +182,15 @@ describe('SnowSync AWS stacks', () => {
           Match.objectLike({ Action: Match.arrayWith(['ses:SendEmail']) }),
         ]),
       },
+      Roles: [{ Ref: Match.stringLikeRegexp('TaskDefTaskRole') }],
     });
     const taskDefinition = JSON.stringify(stacks.service.findResources('AWS::ECS::TaskDefinition'));
     expect(taskDefinition).toContain('"Name":"EMAIL_TRANSPORT","Value":"ses"');
   });
 
   it('refuses to synthesize without the domain and certificate', () => {
-    expect(() => buildApp(new App({ context: { githubRepository: 'a/b' } }))).toThrow(
-      'certificateArn',
-    );
+    expect(() =>
+      buildApp(new App({ context: { githubOidcSubjectPrefix: 'repo:a@1/b@2' } })),
+    ).toThrow('certificateArn');
   });
 });

@@ -7,8 +7,9 @@ export interface SnowSyncConfig {
   domainName: string;
   // Must be on the SES-verified domain.
   emailFrom: string;
-  // owner/repo allowed to deploy through GitHub OIDC.
-  githubRepository: string;
+  // GitHub's OIDC subject prefix for this repo (its sub_claim_prefix), e.g.
+  // repo:owner@ownerId/repo@repoId when the repo uses immutable subjects.
+  githubOidcSubjectPrefix: string;
   // False when the account already has GitHub's OIDC provider.
   createGithubOidcProvider: boolean;
 }
@@ -26,11 +27,13 @@ function required(app: App, name: string): string {
 
 /* Reads every setting and throws a clear message naming anything missing. */
 export function readConfig(app: App): SnowSyncConfig {
+  // cdk.json gives a boolean, but -c on the command line always gives a string.
+  const createOidc: unknown = app.node.tryGetContext('createGithubOidcProvider');
   return {
     certificateArn: required(app, 'certificateArn'),
     domainName: required(app, 'domainName'),
     emailFrom: required(app, 'emailFrom'),
-    githubRepository: required(app, 'githubRepository'),
-    createGithubOidcProvider: app.node.tryGetContext('createGithubOidcProvider') !== false,
+    githubOidcSubjectPrefix: required(app, 'githubOidcSubjectPrefix'),
+    createGithubOidcProvider: createOidc !== false && createOidc !== 'false',
   };
 }
