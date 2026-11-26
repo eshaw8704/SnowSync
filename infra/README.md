@@ -47,22 +47,29 @@ and then the service is scaled up.
      `AWS_DEPLOY_ROLE_ARN` with the `DeployRoleArn` output.
 
 3. Push the first image: Actions → **Deploy** → **Run workflow**. It builds and pushes the image,
-   runs the migrations and registers a task definition for that commit (the service still has 0
-   tasks).
+   registers a task definition for that commit, runs the migrations and tags the image `latest`
+   (the service still has 0 tasks).
 
 4. Scale up: run the same `npx cdk deploy --all` command again **without** `-c desiredCount=0`.
    The service starts 2 tasks from the image the workflow pushed.
 
 ## Every deploy after that
 
-Every green push to `main` runs `.github/workflows/deploy.yml`: it builds the image, tags it with
-the commit SHA, runs the migrations once as a one-off task, registers a task definition pinned to
-that SHA, and rolls the service onto it. A failed migration stops the deploy before the running
-service changes, and if new tasks fail their health checks, ECS rolls back to the previous
-revision (the previous image, not `latest`).
+Every green push to `main` runs `.github/workflows/deploy.yml`:
+
+1. If a newer commit is already on `main`, the run is skipped (that commit deploys itself), so a
+   slow CI run can't put older code back live.
+2. It builds the image, pushes it tagged with the commit SHA, and registers a task definition
+   pinned to that SHA.
+3. It runs the migrations once as a one-off task. If they fail, the deploy stops before the running
+   service changes.
+4. It rolls the service onto the new task definition. If the new tasks fail their health checks,
+   ECS rolls back to the previous revision (the previous image) and the workflow fails.
+5. Only then is the image tagged `latest`.
 
 Running `npx cdk deploy` again later (for infrastructure changes) points the service back at the
-CDK task definition, which uses the most recent image (`latest`), so nothing goes backwards.
+CDK task definition, which uses `latest`: the last image that deployed successfully, so nothing
+goes backwards.
 
 ## Check without deploying
 
