@@ -15,6 +15,7 @@ import { useAuthStore } from '../../state/authStore';
 import { spacing } from '../../theme';
 import { fieldErrors } from '../forms/fieldErrors';
 import { logIn } from './loginApi';
+import { SacStateSsoButton } from './SacStateSsoButton';
 
 type FailureDialog = 'invalid' | 'network' | 'locked' | null;
 
@@ -71,6 +72,7 @@ export function SignInScreen() {
           </Text>
         </Card>
       ) : null}
+      <SacStateSsoButton dividerLabel="or sign in with email" />
       <TextField
         label="Sac State email"
         value={email}
