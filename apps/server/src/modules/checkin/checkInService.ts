@@ -4,6 +4,7 @@ import {
   type OfficerCheckInResult,
   type TripState,
 } from '@snowsync/shared';
+import type { Prisma } from '../../generated/prisma/client';
 import { prisma } from '../../db/prisma';
 import { HttpError } from '../../lib/httpError';
 import { isUniqueViolation } from '../../lib/prismaErrors';
@@ -21,15 +22,38 @@ export function minutesLate(sessionStartsAt: Date, now: Date): number | null {
   return minutes > 0 ? minutes : null;
 }
 
-async function existingResult(tripId: string, userId: string): Promise<OfficerCheckInResult> {
-  const entry = await loadRosterEntry(prisma, tripId, userId);
-  return { entry: entry!, alreadyCheckedIn: true };
+//The operation ID was already used for a change to a different member or trip
+function reusedOperationId(): HttpError {
+  return new HttpError('CONFLICT', 'This operation ID was already used for another change.', {
+    reason: 'OPERATION_ID_REUSED',
+  });
 }
 
-//POST /admin/trips/:tripId/checkins (SS-33). An officer confirms a member is physically present:
-//REGISTERED → CHECKED_IN with method OFFICER, the officer's id, the reason and the time. Only
-//while the trip is in CHECK_IN or ACTIVE. A member who is already checked in (or active) gets
-//their existing record back and nothing new is written; so does a retry with the same opId
+//True when this opId is already stored against a different member or trip. A retry of the same
+//change (same opId, same member, same trip) is not a conflict
+async function opIdUsedElsewhere(
+  tx: Prisma.TransactionClient,
+  opId: string,
+  tripId: string,
+  userId: string,
+): Promise<boolean> {
+  const event = await tx.attendanceEvent.findUnique({
+    where: { opId },
+    select: { tripMembership: { select: { tripId: true, userId: true } } },
+  });
+  if (!event) {
+    return false;
+  }
+  return event.tripMembership.tripId !== tripId || event.tripMembership.userId !== userId;
+}
+
+/**
+ * POST /admin/trips/:tripId/checkins (SS-33). An officer confirms a member is physically present:
+ * REGISTERED → CHECKED_IN with method OFFICER, the officer's id, the reason and the time. Only
+ * while the trip is in CHECK_IN or ACTIVE. A member who is already checked in (or active) gets
+ * their existing record back and nothing new is written; so does a retry with the same opId.
+ * An opId already used for a different member or trip is refused with a conflict.
+ */
 export async function officerCheckIn(
   officerId: string,
   tripId: string,
@@ -49,6 +73,9 @@ export async function officerCheckIn(
         });
       }
       if (membership.participation === 'CHECKED_IN' || membership.participation === 'ACTIVE') {
+        if (await opIdUsedElsewhere(tx, input.opId, tripId, input.userId)) {
+          throw reusedOperationId();
+        }
         return {
           entry: (await loadRosterEntry(tx, tripId, input.userId))!,
           alreadyCheckedIn: true,
@@ -85,9 +112,14 @@ export async function officerCheckIn(
       };
     });
   } catch (error) {
-    // The same opId arrived twice at once and the other request already checked them in.
+    //The same opId arrived twice at once. Report success only if the member really is checked
+    //in; a rolled-back write must not look like a successful check-in.
     if (isUniqueViolation(error)) {
-      return existingResult(tripId, input.userId);
+      const entry = await loadRosterEntry(prisma, tripId, input.userId);
+      if (entry && (entry.participation === 'CHECKED_IN' || entry.participation === 'ACTIVE')) {
+        return { entry, alreadyCheckedIn: true };
+      }
+      throw reusedOperationId();
     }
     throw error;
   }
