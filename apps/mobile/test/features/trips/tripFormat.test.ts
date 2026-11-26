@@ -2,6 +2,7 @@ import {
   daysUntil,
   formatCost,
   formatDateTime,
+  formatShortDate,
   formatTimeRange,
   formatTripDate,
   formatTripDateWithYear,
@@ -15,6 +16,7 @@ describe('trip formatting', () => {
     // 16:00 UTC on Feb 6, 2027 is 8:00 AM in California.
     expect(formatTripDate('2027-02-06T16:00:00.000Z', LA)).toBe('Sat, Feb 6');
     expect(formatTripDateWithYear('2027-02-06T16:00:00.000Z', LA)).toBe('Sat, Feb 6, 2027');
+    expect(formatShortDate('2027-02-06T16:00:00.000Z', LA)).toBe('Feb 6');
     expect(formatTimeRange('2027-02-06T16:00:00.000Z', '2027-02-07T00:00:00.000Z', LA)).toBe(
       '8:00 AM–4:00 PM',
     );
