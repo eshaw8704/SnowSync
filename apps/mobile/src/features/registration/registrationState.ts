@@ -32,13 +32,28 @@ export function panelView(
 }
 
 /** Where the registration flow ends up, as the result screen's `outcome` parameter. */
-export type RegistrationOutcome = 'registered' | 'already' | 'full' | 'closed';
+export type RegistrationOutcome = 'registered' | 'already' | 'full' | 'closed' | 'cancelled';
 
 /** Reads the outcome parameter and rejects invalid values. */
 export function parseOutcome(raw: string | undefined): RegistrationOutcome | null {
-  if (raw === 'registered' || raw === 'already' || raw === 'full' || raw === 'closed') {
+  if (
+    raw === 'registered' ||
+    raw === 'already' ||
+    raw === 'full' ||
+    raw === 'closed' ||
+    raw === 'cancelled'
+  ) {
     return raw;
   }
 
   return null;
+}
+
+/**
+ * True while a member could register again themselves (same rule as the server's
+ * isRegistrationOpen). The trip stays OPEN_FOR_REGISTRATION until check-in starts, so after the
+ * deadline a member can still cancel but can't come back: the cancel screens must not promise it.
+ */
+export function canRegisterAgain(trip: TripDetail, now: Date = new Date()): boolean {
+  return trip.state === 'OPEN_FOR_REGISTRATION' && now < new Date(trip.registrationClosesAt);
 }

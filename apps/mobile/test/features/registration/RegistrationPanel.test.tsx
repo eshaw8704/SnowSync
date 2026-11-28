@@ -57,6 +57,24 @@ describe('RegistrationPanel', () => {
     expect(screen.getByLabelText('Check-in: 7:30 AM')).toBeTruthy();
   });
 
+  it('offers Cancel registration only while registration is open', async () => {
+    const registered = {
+      ...MY_REGISTRATION,
+      participation: 'REGISTERED' as const,
+      chargeStatus: 'UNPAID' as const,
+      chargeAmountCents: 5000,
+    };
+    jest.mocked(getMyRegistration).mockResolvedValue(registered);
+    const { unmount } = render(<RegistrationPanel trip={OPEN_TRIP} />);
+    fireEvent.press(await screen.findByRole('button', { name: 'Cancel registration' }));
+    expect(router.push).toHaveBeenCalledWith('/trip/cancel-registration/trip-heavenly');
+    unmount();
+
+    render(<RegistrationPanel trip={{ ...OPEN_TRIP, state: 'CHECK_IN' }} />);
+    expect(await screen.findByText("You're registered")).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Cancel registration' })).toBeNull();
+  });
+
   it('shows how and when an officer checked me in, with lateness in words', async () => {
     jest.mocked(getMyRegistration).mockResolvedValue({
       ...MY_REGISTRATION,
