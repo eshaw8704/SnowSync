@@ -9,7 +9,7 @@ import { StatusHero } from '../../components/StatusHero';
 import { StatusLayout } from '../../components/StatusLayout';
 import { formatCost, formatDateTime, formatShortDate, formatTime } from '../trips/tripFormat';
 import { getMyRegistration } from './registrationApi';
-import { parseOutcome, type RegistrationOutcome } from './registrationState';
+import { canRegisterAgain, parseOutcome, type RegistrationOutcome } from './registrationState';
 import { TripLoadGate } from './TripLoadGate';
 import { useTripDetail } from './useTripDetail';
 
@@ -24,10 +24,52 @@ function viewTrip(tripId: string): void {
 function ResultContent({ trip, outcome }: { trip: TripDetail; outcome: RegistrationOutcome }) {
   const tz = trip.resortTimeZone;
 
+  if (outcome === 'cancelled') {
+    return (
+      <StatusLayout
+        footer={<Button label="Back to available trips" onPress={() => router.replace('/trips')} />}
+      >
+        <StatusHero
+          chip="CANCELLED"
+          tone="red"
+          caption="Spot released"
+          title="Registration cancelled"
+          subtitle={`You're no longer registered for ${trip.resortName}. The trip is still open for other members.`}
+        />
+        <DetailCard
+          title="Payment review"
+          rows={[
+            { label: 'Refund', value: 'Contact treasurer' },
+            { label: 'Policy', value: 'Club rules apply' },
+          ]}
+        />
+        <DetailCard
+          title="Trip remains open"
+          note={
+            canRegisterAgain(trip)
+              ? 'You can register again while spots remain. Nothing was refunded automatically.'
+              : "Registration has closed, so you can't register again yourself. Nothing was refunded automatically."
+          }
+        />
+      </StatusLayout>
+    );
+  }
+
   if (outcome === 'already') {
     return (
       <StatusLayout
-        footer={<Button label="View registered trip" onPress={() => viewTrip(trip.id)} />}
+        footer={
+          <>
+            <Button label="View registered trip" onPress={() => viewTrip(trip.id)} />
+            {trip.state === 'OPEN_FOR_REGISTRATION' ? (
+              <Button
+                label="Cancel registration"
+                variant="secondary"
+                onPress={() => router.replace(`/trip/cancel-registration/${trip.id}`)}
+              />
+            ) : null}
+          </>
+        }
       >
         <StatusHero
           chip="REGISTERED"
@@ -234,7 +276,8 @@ function VerifiedResult({ trip, outcome }: { trip: TripDetail; outcome: Registra
 
 /**
  * Where registering ends up (SS-28, Figma catalog 10 pages 33–35): confirmed, already registered
- * (duplicate blocked), full or closed. Route /trip/registration-result/:tripId?outcome=…
+ * (duplicate blocked), full, closed, or cancelled (SS-31). Route
+ * /trip/registration-result/:tripId?outcome=…
  */
 export function RegistrationResultScreen() {
   const { tripId, outcome } = useLocalSearchParams<{ tripId: string; outcome?: string }>();

@@ -80,6 +80,35 @@ describe('RegistrationResultScreen', () => {
     expect(getMyRegistration).not.toHaveBeenCalled();
   });
 
+  it('confirms a cancellation and sends the member back to available trips', async () => {
+    mockOutcome = 'cancelled';
+    render(<RegistrationResultScreen />);
+    expect(await screen.findByRole('header', { name: 'Registration cancelled' })).toBeTruthy();
+    expect(screen.getByLabelText('Status: CANCELLED')).toBeTruthy();
+    expect(screen.getByLabelText('Refund: Contact treasurer')).toBeTruthy();
+    fireEvent.press(screen.getByRole('button', { name: 'Back to available trips' }));
+    expect(router.replace).toHaveBeenCalledWith('/trips');
+  });
+
+  it('does not promise registering again after a cancellation past the deadline', async () => {
+    mockOutcome = 'cancelled';
+    jest
+      .mocked(getTrip)
+      .mockResolvedValue({ ...HEAVENLY_DETAIL, registrationClosesAt: '2020-01-01T00:00:00.000Z' });
+    render(<RegistrationResultScreen />);
+    expect(
+      await screen.findByText(/Registration has closed, so you can't register again yourself/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/You can register again/)).toBeNull();
+  });
+
+  it('offers Cancel registration from the duplicate-blocked result', async () => {
+    mockOutcome = 'already';
+    render(<RegistrationResultScreen />);
+    fireEvent.press(await screen.findByRole('button', { name: 'Cancel registration' }));
+    expect(router.replace).toHaveBeenCalledWith('/trip/cancel-registration/trip-heavenly');
+  });
+
   it('opens Trip detail when there is nothing to go back to', async () => {
     mockOutcome = 'registered';
     jest.mocked(router.canGoBack).mockReturnValueOnce(false);

@@ -45,8 +45,9 @@ export interface RegistrationPanelProps {
 
 /**
  * My registration on Trip detail (SS-28, Figma catalog 10 pages 32–35): Register when spots are
- * open, the full and closed states, my registration with its payment status, and how and when I
- * was checked in (SS-33). Reloads whenever Trip detail comes back into view.
+ * open, the full and closed states, my registration with its payment status and Cancel
+ * registration while registration is open (SS-31), and how and when I was checked in (SS-33).
+ * Reloads whenever Trip detail comes back into view.
  */
 export function RegistrationPanel({ trip }: RegistrationPanelProps) {
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
@@ -145,6 +146,13 @@ export function RegistrationPanel({ trip }: RegistrationPanelProps) {
             { label: 'Check-in', value: formatTime(trip.checkInStartsAt, tz) },
           ]}
           note="Your spot is saved. Location sharing and chat stay off until the active session begins."
+        />
+      ) : null}
+      {view === 'registered' && trip.state === 'OPEN_FOR_REGISTRATION' ? (
+        <Button
+          label="Cancel registration"
+          variant="secondary"
+          onPress={() => router.push(`/trip/cancel-registration/${trip.id}`)}
         />
       ) : null}
       {view === 'checkedIn' && registration.checkedInAt ? (
